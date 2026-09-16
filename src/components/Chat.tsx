@@ -156,6 +156,66 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
     []
   );
 
+  /**
+   * Streaming content setter, coalesced to at most one update per frame.
+   *
+   * Providers can emit many tokens per frame. Applying each one triggers a full
+   * React render plus markdown re-render that the browser cannot paint, so the
+   * work is pure overhead. Only the latest value is applied, and the pending
+   * update is flushed synchronously when generation ends so the final content is
+   * never left one frame behind.
+   */
+  const pendingStreamingContentRef = useRef<string | null>(null);
+  const streamingFrameRef = useRef<number | null>(null);
+
+  const setStreamingContent = useCallback(
+    (value: string) => {
+      pendingStreamingContentRef.current = value;
+
+      if (streamingFrameRef.current !== null) return;
+
+      streamingFrameRef.current = requestAnimationFrame(() => {
+        streamingFrameRef.current = null;
+        const pending = pendingStreamingContentRef.current;
+        if (pending !== null) {
+          safeSet.setCurrentAiMessage(pending);
+        }
+      });
+    },
+    [safeSet]
+  );
+
+  /**
+   * Clear streaming content and discard any coalesced update from the previous
+   * turn, so a pending frame cannot resurrect stale text into a fresh message.
+   */
+  const resetStreamingContent = useCallback(() => {
+    if (streamingFrameRef.current !== null) {
+      cancelAnimationFrame(streamingFrameRef.current);
+      streamingFrameRef.current = null;
+    }
+    pendingStreamingContentRef.current = null;
+    safeSet.setCurrentAiMessage("");
+  }, [safeSet]);
+
+  /**
+   * Apply any coalesced streaming content immediately and stop the pending frame.
+   *
+   * Called when generation finishes so the last tokens are not dropped, and on
+   * unmount so no frame outlives the component.
+   */
+  const flushStreamingContent = useCallback(() => {
+    if (streamingFrameRef.current !== null) {
+      cancelAnimationFrame(streamingFrameRef.current);
+      streamingFrameRef.current = null;
+    }
+    const pending = pendingStreamingContentRef.current;
+    if (pending !== null) {
+      pendingStreamingContentRef.current = null;
+      safeSet.setCurrentAiMessage(pending);
+    }
+  }, [safeSet]);
+
   const [selectedTextContexts] = useSelectedTextContexts();
 
   // Any selection hides both active note and active web tab
@@ -357,7 +417,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
           llmMessage,
           chainManager,
           addMessage,
-          safeSet.setCurrentAiMessage,
+          setStreamingContent,
           setAbortController,
           { debug: settings.debug, updateLoadingMessage: safeSet.setLoadingMessage }
         );
@@ -371,6 +431,9 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
       logError("Error sending message:", error);
       new Notice("Failed to send message. Please try again.");
     } finally {
+      // Apply the last coalesced tokens before clearing the loading state, so
+      // the completed message is never missing its final frame of content.
+      flushStreamingContent();
       safeSet.setLoading(false);
       safeSet.setLoadingMessage(LOADING_MESSAGES.DEFAULT);
       streamingMessageIdRef.current = null;
@@ -397,13 +460,14 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
       if (abortControllerRef.current) {
         logInfo(`stopping generation..., reason: ${reason}`);
         abortControllerRef.current.abort(reason);
+        // Keep the partial AI message visible, including its last coalesced chunk
+        flushStreamingContent();
         safeSet.setLoading(false);
         safeSet.setLoadingMessage(LOADING_MESSAGES.DEFAULT);
-        // Keep the partial AI message visible
         // Don't clear setCurrentAiMessage here
       }
     },
-    [safeSet]
+    [flushStreamingContent, safeSet]
   );
 
   // Cleanup on unmount - abort any ongoing streaming
@@ -411,6 +475,11 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
     isMountedRef.current = true;
     return () => {
       isMountedRef.current = false;
+      // Cancel any pending frame so it cannot fire after unmount
+      if (streamingFrameRef.current !== null) {
+        cancelAnimationFrame(streamingFrameRef.current);
+        streamingFrameRef.current = null;
+      }
       // Abort any ongoing streaming when component unmounts
       if (abortControllerRef.current) {
         abortControllerRef.current.abort(ABORT_REASON.UNMOUNT);
@@ -432,13 +501,13 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
       }
 
       // Clear current AI message and set loading state
-      safeSet.setCurrentAiMessage("");
+      resetStreamingContent();
       streamingMessageIdRef.current = `msg-${uuidv4()}`;
       safeSet.setLoading(true);
       try {
         const success = await chatUIState.regenerateMessage(
           messageToRegenerate.id!,
-          safeSet.setCurrentAiMessage,
+          setStreamingContent,
           addMessage
         );
 
@@ -456,6 +525,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
         logError("Error regenerating message:", error);
         new Notice("Failed to regenerate message. Please try again.");
       } finally {
+        flushStreamingContent();
         safeSet.setLoading(false);
         streamingMessageIdRef.current = null;
       }
@@ -468,6 +538,9 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
       handleSaveAsNote,
       addMessage,
       safeSet,
+      setStreamingContent,
+      flushStreamingContent,
+      resetStreamingContent,
     ]
   );
 
@@ -510,7 +583,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
                   llmMessage,
                   chainManager,
                   addMessage,
-                  safeSet.setCurrentAiMessage,
+                  setStreamingContent,
                   setAbortController,
                   { debug: settings.debug, updateLoadingMessage: safeSet.setLoadingMessage }
                 );
@@ -519,6 +592,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
               logError("Error regenerating AI response:", error);
               new Notice("Failed to regenerate AI response. Please try again.");
             } finally {
+              flushStreamingContent();
               safeSet.setLoading(false);
               streamingMessageIdRef.current = null;
             }
@@ -546,6 +620,8 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
       handleSaveAsNote,
       safeSet,
       setAbortController,
+      setStreamingContent,
+      flushStreamingContent,
     ]
   );
 
@@ -710,7 +786,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
     resetSessionSystemPromptSettings();
 
     // Additional UI state reset specific to this component
-    safeSet.setCurrentAiMessage("");
+    resetStreamingContent();
     setContextNotes([]);
     setLatestTokenCount(null); // Clear token count on new chat
     // Capture web selection URL before clearing for suppression
@@ -737,7 +813,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
     settings.autoAddActiveContentToContext,
     selectedChain,
     handleSaveAsNote,
-    safeSet,
+    resetStreamingContent,
     plugin,
     selectedTextContexts,
   ]);
@@ -911,6 +987,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
               setInputMessage={setInputMessage}
               handleSendMessage={handleSendMessage}
               isGenerating={loading}
+              loadingMessage={loadingMessage}
               onStopGenerating={() => handleStopGenerating(ABORT_REASON.USER_STOPPED)}
               app={app}
               contextNotes={contextNotes}

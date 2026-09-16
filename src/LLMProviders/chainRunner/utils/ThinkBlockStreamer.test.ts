@@ -410,4 +410,211 @@ describe("ThinkBlockStreamer", () => {
       expect(currentMessage).toContain("</think>Text 3");
     });
   });
+
+  describe("reasoning and content in a single chunk", () => {
+    it("writes reasoning before content, never interleaved", () => {
+      let currentMessage = "";
+      const streamer = new ThinkBlockStreamer((msg) => {
+        currentMessage = msg;
+      });
+
+      // Some gateways deliver reasoning and answer text in one delta. Reasoning
+      // is produced first, so it must be written (and the block closed) before
+      // the answer is appended.
+      streamer.processChunk({
+        content: "The answer.",
+        additional_kwargs: { reasoning_content: "The reasoning." },
+      });
+
+      expect(currentMessage).toBe("\n<think>The reasoning.</think>The answer.");
+    });
+
+    it("does not leave the answer inside the think block", () => {
+      let currentMessage = "";
+      const streamer = new ThinkBlockStreamer((msg) => {
+        currentMessage = msg;
+      });
+
+      streamer.processChunk({
+        content: "Answer text.",
+        additional_kwargs: { reasoning_content: "Reasoning text." },
+      });
+
+      const thinkClose = currentMessage.indexOf("</think>");
+      const answerIndex = currentMessage.indexOf("Answer text.");
+
+      expect(thinkClose).toBeGreaterThan(-1);
+      expect(answerIndex).toBeGreaterThan(thinkClose);
+    });
+
+    it("keeps a reasoning-only chunk inside the open block until content arrives", () => {
+      let currentMessage = "";
+      const streamer = new ThinkBlockStreamer((msg) => {
+        currentMessage = msg;
+      });
+
+      // Typical provider sequence: reasoning streams while content is empty,
+      // then the answer arrives.
+      streamer.processChunk({
+        content: "",
+        additional_kwargs: { reasoning_content: "Reasoning." },
+      });
+      streamer.processChunk({
+        content: "",
+        additional_kwargs: { reasoning_content: " More reasoning." },
+      });
+      streamer.processChunk({ content: "Answer.", additional_kwargs: {} });
+
+      expect(currentMessage).toBe("\n<think>Reasoning. More reasoning.</think>Answer.");
+    });
+
+    it("never places answer text inside a reasoning block when reasoning resumes", () => {
+      let currentMessage = "";
+      const streamer = new ThinkBlockStreamer((msg) => {
+        currentMessage = msg;
+      });
+
+      // Contradictory input: reasoning resumes after the answer has begun. A
+      // single linear string cannot interleave the two, so the later reasoning
+      // opens its own block. What matters is that no text is lost and that the
+      // answer is never swallowed into a reasoning block.
+      streamer.processChunk({
+        content: "Answer.",
+        additional_kwargs: { reasoning_content: "Reasoning." },
+      });
+      streamer.processChunk({
+        content: "",
+        additional_kwargs: { reasoning_content: " More reasoning." },
+      });
+
+      expect(currentMessage).toContain("Answer.");
+      expect(currentMessage).toContain("Reasoning.");
+      expect(currentMessage).toContain(" More reasoning.");
+
+      // The answer must sit outside every think block.
+      const segments = currentMessage.split(/(<\/?think>)/);
+      let depth = 0;
+      let answerOutsideBlock = false;
+      for (const segment of segments) {
+        if (segment === "<think>") depth++;
+        else if (segment === "</think>") depth--;
+        else if (depth === 0 && segment.includes("Answer.")) answerOutsideBlock = true;
+      }
+      expect(answerOutsideBlock).toBe(true);
+    });
+
+    it("does not emit a stray close tag when no reasoning preceded the answer", () => {
+      let currentMessage = "";
+      const streamer = new ThinkBlockStreamer((msg) => {
+        currentMessage = msg;
+      });
+
+      streamer.processChunk({ content: "Just an answer.", additional_kwargs: {} });
+
+      expect(currentMessage).toBe("Just an answer.");
+      expect(currentMessage).not.toContain("</think>");
+    });
+  });
+
+  describe("whitespace preservation when excluding thinking", () => {
+    it("preserves indentation of content following an excluded block", () => {
+      let currentMessage = "";
+      const streamer = new ThinkBlockStreamer(
+        (msg) => {
+          currentMessage = msg;
+        },
+        true // excludeThinking
+      );
+
+      streamer.processChunk({
+        content: "<think>hidden</think>    indented code",
+        additional_kwargs: {},
+      });
+
+      // trimStart() used to eat the leading spaces here.
+      expect(currentMessage).toBe("    indented code");
+    });
+
+    it("keeps a blank line that separates the block from following content", () => {
+      let currentMessage = "";
+      const streamer = new ThinkBlockStreamer((msg) => {
+        currentMessage = msg;
+      }, true);
+
+      streamer.processChunk({
+        content: "<think>hidden</think>\n\nParagraph after.",
+        additional_kwargs: {},
+      });
+
+      expect(currentMessage).toContain("Paragraph after.");
+      // One newline is kept as the block boundary, preserving the paragraph split.
+      expect(currentMessage.startsWith("\n")).toBe(true);
+    });
+
+    it("keeps answer text that arrives after an excluded block", () => {
+      let currentMessage = "";
+      const streamer = new ThinkBlockStreamer((msg) => {
+        currentMessage = msg;
+      }, true);
+
+      streamer.processChunk({ content: "<think>step 1", additional_kwargs: {} });
+      streamer.processChunk({ content: " step 2</think>", additional_kwargs: {} });
+      streamer.processChunk({ content: "Final answer.", additional_kwargs: {} });
+
+      expect(currentMessage).toBe("Final answer.");
+    });
+
+    it("loses no content when reasoning and answer alternate under excludeThinking", () => {
+      let currentMessage = "";
+      const streamer = new ThinkBlockStreamer((msg) => {
+        currentMessage = msg;
+      }, true);
+
+      streamer.processChunk({ content: "A", additional_kwargs: {} });
+      streamer.processChunk({ content: "<think>secret", additional_kwargs: {} });
+      streamer.processChunk({ content: " more secret</think>", additional_kwargs: {} });
+      streamer.processChunk({ content: "B", additional_kwargs: {} });
+
+      expect(currentMessage).toContain("A");
+      expect(currentMessage).toContain("B");
+      expect(currentMessage).not.toContain("secret");
+    });
+  });
+
+  describe("special token stripping", () => {
+    it("strips chat template tokens from OpenRouter-style content", () => {
+      let currentMessage = "";
+      const streamer = new ThinkBlockStreamer((msg) => {
+        currentMessage = msg;
+      });
+
+      streamer.processChunk({
+        content: "Answer.<|im_end|>",
+        additional_kwargs: { delta: { reasoning: "thinking" } },
+      });
+
+      expect(currentMessage).not.toContain("<|im_end|>");
+      expect(currentMessage).toContain("Answer.");
+    });
+  });
+
+  describe("close() with an error response", () => {
+    it("appends the error outside any think block", () => {
+      // This case asserts on close()'s return value, not the streaming callback.
+      const streamer = new ThinkBlockStreamer(() => {});
+
+      streamer.processChunk({ content: "Partial", additional_kwargs: {} });
+      streamer.processErrorChunk("Request failed");
+
+      const result = streamer.close();
+
+      // Error text is answer content, so it must not sit inside a think block.
+      const thinkOpen = result.content.indexOf("<think>");
+      const errorIndex = result.content.indexOf("Request failed");
+      expect(errorIndex).toBeGreaterThan(-1);
+      if (thinkOpen !== -1) {
+        expect(errorIndex).toBeGreaterThan(result.content.indexOf("</think>"));
+      }
+    });
+  });
 });

@@ -191,7 +191,7 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
               ref={buttonRef}
               variant="ghost2"
               size="fit"
-              className="tw-ml-1 tw-rounded-sm tw-border tw-border-solid tw-border-border tw-text-muted"
+              className="tw-ml-1 tw-rounded-sm tw-text-muted hover:tw-bg-modifier-hover"
             >
               <span className="tw-text-base tw-font-medium tw-leading-none">@</span>
               {!hasContext && <span className="tw-pr-1 tw-text-sm tw-leading-4">Add context</span>}

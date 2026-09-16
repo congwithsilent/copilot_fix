@@ -38,7 +38,7 @@ export type ParsedContentType =
 export type PatternType = "notes" | "urls" | "tools" | "customTemplates";
 
 // Type representing the data associated with a pill
-export type PillDataValue = TFile | TFolder | string | WebTabContext;
+export type PillDataValue = TFile | TFolder | string | WebTabContext | { path: string };
 
 export interface PillData {
   type: PillType;
@@ -69,6 +69,17 @@ export function $createPillNode(pillData: PillData) {
     case "folders":
       if (data instanceof TFolder) {
         return $createFolderPillNode(data.path);
+      }
+      if (typeof data === "string") {
+        return $createFolderPillNode(data);
+      }
+      if (
+        data &&
+        typeof data === "object" &&
+        "path" in data &&
+        typeof (data as any).path === "string"
+      ) {
+        return $createFolderPillNode((data as any).path);
       }
       break;
     case "webTabs":

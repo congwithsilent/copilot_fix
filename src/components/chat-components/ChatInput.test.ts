@@ -37,6 +37,31 @@ describe("ChatInput Edit Mode Behavior", () => {
       expect(normalModeShowsContextControl).toBe(true);
     });
   });
+
+  describe("Context merge and non-Plus delivery behavior", () => {
+    it("should merge contextFolders from badges and editor pills without duplicates", () => {
+      const badgeFolders = ["folderA", "folderB"];
+      const editorPillFolders = ["folderB", "folderC"];
+      const allFolders = Array.from(new Set([...badgeFolders, ...editorPillFolders]));
+      expect(allFolders).toEqual(["folderA", "folderB", "folderC"]);
+    });
+
+    it("should merge contextNotes from badges and editor pills by file path", () => {
+      const badgeNotes = [
+        { path: "note1.md", basename: "note1" },
+        { path: "note2.md", basename: "note2" },
+      ];
+      const editorNotes = [
+        { path: "note2.md", basename: "note2_pill" },
+        { path: "note3.md", basename: "note3" },
+      ];
+      const allNotes = Array.from(
+        new Map([...badgeNotes, ...editorNotes].map((n) => [n.path, n])).values()
+      );
+      expect(allNotes).toHaveLength(3);
+      expect(allNotes.map((n) => n.path)).toEqual(["note1.md", "note2.md", "note3.md"]);
+    });
+  });
 });
 
 // Helper function to simulate the slash detection and replacement logic

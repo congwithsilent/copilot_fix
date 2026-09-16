@@ -1,5 +1,7 @@
-import { parseTextForPills } from "./lexicalTextUtils";
+import { parseTextForPills, $createPillNode } from "./lexicalTextUtils";
 import { TFile, TFolder } from "obsidian";
+import { FolderPillNode } from "../pills/FolderPillNode";
+import { createEditor } from "lexical";
 
 // Mock dependencies
 jest.mock("@/logger", () => ({
@@ -434,6 +436,50 @@ describe("parseTextForPills", () => {
         result.some((r) => r.type === "text" && r.content?.includes("#tag_with_underscores"))
       ).toBe(true);
       expect(result.some((r) => r.type === "folder-pill")).toBe(true);
+    });
+  });
+});
+
+describe("$createPillNode with folders", () => {
+  const editor = createEditor({
+    nodes: [FolderPillNode],
+  });
+
+  it("should create FolderPillNode with TFolder", () => {
+    const mockFolder = Object.create(TFolder.prototype);
+    mockFolder.path = "notes/my-folder";
+    editor.update(() => {
+      const node = $createPillNode({
+        type: "folders",
+        title: "my-folder",
+        data: mockFolder,
+      });
+      expect(node).toBeInstanceOf(FolderPillNode);
+      expect(node.getValue()).toBe("notes/my-folder");
+    });
+  });
+
+  it("should create FolderPillNode with string data", () => {
+    editor.update(() => {
+      const node = $createPillNode({
+        type: "folders",
+        title: "my-folder",
+        data: "notes/my-folder",
+      });
+      expect(node).toBeInstanceOf(FolderPillNode);
+      expect(node.getValue()).toBe("notes/my-folder");
+    });
+  });
+
+  it("should create FolderPillNode with object containing path", () => {
+    editor.update(() => {
+      const node = $createPillNode({
+        type: "folders",
+        title: "my-folder",
+        data: { path: "notes/my-folder" },
+      });
+      expect(node).toBeInstanceOf(FolderPillNode);
+      expect(node.getValue()).toBe("notes/my-folder");
     });
   });
 });

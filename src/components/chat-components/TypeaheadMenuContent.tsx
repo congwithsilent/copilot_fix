@@ -199,7 +199,7 @@ export function TypeaheadMenuContent({
 
         {/* Search Bar - integrated at bottom of menu */}
         {searchBarMode && (
-          <div className="tw-border-t tw-border-solid tw-border-border tw-p-0.5">
+          <div className="tw-bg-secondary-alt tw-p-0.5">
             <input
               ref={searchInputRef}
               type="text"

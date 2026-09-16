@@ -1,4 +1,5 @@
 import ChatSingleMessage from "@/components/chat-components/ChatSingleMessage";
+import { GeneratingIndicator } from "@/components/chat-components/GeneratingIndicator";
 import { RelevantNotes } from "@/components/chat-components/RelevantNotes";
 import { SuggestedPrompts } from "@/components/chat-components/SuggestedPrompts";
 import { USER_SENDER } from "@/constants";
@@ -6,7 +7,7 @@ import { useChatScrolling } from "@/hooks/useChatScrolling";
 import { useSettingsValue } from "@/settings/model";
 import { ChatMessage } from "@/types/message";
 import { App } from "obsidian";
-import React, { memo, useEffect, useState } from "react";
+import React, { memo, useMemo } from "react";
 
 interface ChatMessagesProps {
   chatHistory: ChatMessage[];
@@ -37,8 +38,6 @@ const ChatMessages = memo(
     onReplaceChat,
     showHelperComponents = true,
   }: ChatMessagesProps) => {
-    const [loadingDots, setLoadingDots] = useState("");
-
     const settings = useSettingsValue();
 
     // Chat scrolling behavior
@@ -46,19 +45,13 @@ const ChatMessages = memo(
       chatHistory,
     });
 
-    useEffect(() => {
-      let intervalId: NodeJS.Timeout;
-      if (loading) {
-        intervalId = setInterval(() => {
-          setLoadingDots((dots) => (dots.length < 6 ? dots + "." : ""));
-        }, 200);
-      } else {
-        setLoadingDots("");
-      }
-      return () => clearInterval(intervalId);
-    }, [loading]);
+    // Count visible messages once instead of filtering inside the render map.
+    const visibleMessagesCount = useMemo(
+      () => chatHistory.reduce((count, message) => (message.isVisible ? count + 1 : count), 0),
+      [chatHistory]
+    );
 
-    if (!chatHistory.filter((message) => message.isVisible).length && !currentAiMessage) {
+    if (visibleMessagesCount === 0 && !currentAiMessage) {
       return (
         <div className="tw-flex tw-size-full tw-flex-col tw-gap-2 tw-overflow-y-auto">
           {showHelperComponents && settings.showRelevantNotes && (
@@ -71,10 +64,6 @@ const ChatMessages = memo(
       );
     }
 
-    const getLoadingMessage = () => {
-      return loadingMessage ? `${loadingMessage} ${loadingDots}` : loadingDots;
-    };
-
     return (
       <div className="tw-flex tw-h-full tw-flex-1 tw-flex-col tw-overflow-hidden">
         {showHelperComponents && settings.showRelevantNotes && (
@@ -83,11 +72,10 @@ const ChatMessages = memo(
         <div
           ref={scrollContainerCallbackRef}
           data-testid="chat-messages"
-          className="tw-relative tw-flex tw-w-full tw-flex-1 tw-select-text tw-flex-col tw-items-start tw-justify-start tw-overflow-y-auto tw-scroll-smooth tw-break-words tw-text-[calc(var(--font-text-size)_-_2px)]"
+          className="copilot-chat-text tw-relative tw-flex tw-w-full tw-flex-1 tw-select-text tw-flex-col tw-items-start tw-justify-start tw-overflow-y-auto tw-scroll-smooth tw-break-words"
         >
           {chatHistory.map((message, index) => {
-            const visibleMessages = chatHistory.filter((m) => m.isVisible);
-            const isLastMessage = index === visibleMessages.length - 1;
+            const isLastMessage = index === visibleMessagesCount - 1;
             // Only apply min-height to AI messages that are last
             const shouldApplyMinHeight = isLastMessage && message.sender !== USER_SENDER;
 
@@ -113,7 +101,7 @@ const ChatMessages = memo(
               )
             );
           })}
-          {(currentAiMessage || loading) && (
+          {currentAiMessage && (
             <div
               className="tw-w-full"
               style={{
@@ -125,7 +113,7 @@ const ChatMessages = memo(
                 message={{
                   id: streamingMessageId ?? undefined,
                   sender: "AI",
-                  message: currentAiMessage || getLoadingMessage(),
+                  message: currentAiMessage,
                   isVisible: true,
                   timestamp: null,
                 }}
@@ -133,6 +121,13 @@ const ChatMessages = memo(
                 isStreaming={true}
                 onDelete={() => {}}
               />
+            </div>
+          )}
+          {/* Waiting for the first token: no content to mark down yet, so the
+              status line is rendered directly rather than through the renderer */}
+          {!currentAiMessage && loading && (
+            <div className="tw-w-full tw-p-2">
+              <GeneratingIndicator isGenerating={loading} loadingMessage={loadingMessage} />
             </div>
           )}
         </div>

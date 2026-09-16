@@ -278,29 +278,6 @@ If your plugin does not need CSS, delete this file.
   height: 18px;
 }
 
-.model-select-content {
-  min-width: 120px;
-  background: var(--background-secondary);
-  border: 1px solid var(--background-modifier-border);
-  border-radius: 4px;
-  padding: 4px;
-  font-size: 10px;
-  z-index: 1000;
-}
-
-.model-select-content [role="menuitem"] {
-  padding: 6px 12px;
-  cursor: pointer;
-  border-radius: 2px;
-  font-size: 10px;
-  color: var(--text-normal);
-  margin: 2px 0;
-}
-
-.model-select-content [role="menuitem"]:hover {
-  background: var(--background-modifier-hover);
-}
-
 .submit-button svg,
 .model-select-button svg,
 .chain-select-button svg {
@@ -310,29 +287,6 @@ If your plugin does not need CSS, delete this file.
 
 .chain-select-button:hover {
   opacity: 1;
-  background: var(--background-modifier-hover);
-}
-
-.chain-select-content {
-  min-width: 120px;
-  background: var(--background-secondary);
-  border: 1px solid var(--background-modifier-border);
-  border-radius: 4px;
-  padding: 4px;
-  font-size: 10px;
-  z-index: 1000;
-}
-
-.chain-select-content [role="menuitem"] {
-  padding: 6px 12px;
-  cursor: pointer;
-  border-radius: 2px;
-  font-size: 10px;
-  color: var(--text-normal);
-  margin: 2px 0;
-}
-
-.chain-select-content [role="menuitem"]:hover {
   background: var(--background-modifier-hover);
 }
 
@@ -366,94 +320,255 @@ If your plugin does not need CSS, delete this file.
   margin-bottom: 0;
 }
 
+/* ---------------------------------------------------------------------------
+ * Model output typography
+ *
+ * Long-form answers are the main thing users read here, so the rhythm gets
+ * explicit control instead of relying on Obsidian's defaults. Spacing is
+ * expressed in `em` so it scales with the user's font size setting: a heading
+ * keeps its visual relationship to body text whatever size the vault uses.
+ *
+ * The previous rules set `p { margin: 0 }`, which collapsed every paragraph
+ * into one undifferentiated block.
+ * ------------------------------------------------------------------------ */
+
+/* Width cap for comfortable reading. Applied to the text flow rather than the
+ * container so tables and code blocks can still use the full pane width. */
+/* Single source of truth for conversation text sizing.
+ *
+ * Chat text sits slightly below the editor's text size so the panel reads as
+ * secondary to the note it sits beside. Defined once here so every surface in
+ * the chat (message list, user text, streaming text) scales together. */
+.workspace-leaf-content[data-type="copilot-chat-view"] {
+  --copilot-chat-font-size: calc(var(--font-text-size) - 1px);
+}
+
+/* Conversation text size, resolved from the variable above. */
+.copilot-chat-text {
+  font-size: var(--copilot-chat-font-size, calc(var(--font-text-size) - 1px));
+}
+
 .message-content {
+  --copilot-reading-measure: 40rem;
   word-wrap: break-word;
   overflow-wrap: break-word;
   word-break: break-word;
-  line-height: 1.6 !important;
+  line-height: 1.65;
+  text-wrap: pretty;
+}
+
+/* The measure is applied to prose elements rather than to `.message-content > *`,
+ * because markdown is rendered into the segment wrappers below, not directly
+ * into `.message-content`. Targeting the wrappers would cap tables and code
+ * blocks too, which read better at full width. */
+.message-content p,
+.message-content li,
+.message-content blockquote,
+.message-content h1,
+.message-content h2,
+.message-content h3,
+.message-content h4,
+.message-content h5,
+.message-content h6 {
+  max-width: var(--copilot-reading-measure);
 }
 
 .message-content p {
-  margin-top: 0;
+  margin: 0 0 0.85em;
+}
+
+.message-content p:last-child {
   margin-bottom: 0;
+}
+
+/* Headings: clear size steps and space above, so sections are scannable. */
+.message-content h1,
+.message-content h2,
+.message-content h3,
+.message-content h4,
+.message-content h5,
+.message-content h6 {
+  margin: 1.6em 0 0.6em;
+  line-height: 1.3;
+  font-weight: var(--font-semibold);
+  color: var(--text-normal);
+}
+
+/* Suppress the leading margin on the first block of the message, whichever
+ * wrapper the streaming renderer happens to put it in. */
+.message-content > :first-child > :first-child,
+.message-content > :first-child > .message-segment-stable > :first-child,
+.message-content > :first-child > .message-segment-tail > :first-child {
+  margin-top: 0;
+}
+
+.message-content h1 {
+  font-size: 1.5em;
+}
+
+.message-content h2 {
+  font-size: 1.3em;
+}
+
+.message-content h3 {
+  font-size: 1.15em;
+}
+
+.message-content h4 {
+  font-size: 1.05em;
+}
+
+.message-content h5,
+.message-content h6 {
+  font-size: 1em;
+  color: var(--text-muted);
+}
+
+/* Lists: tightened to the text block, with real spacing between items so
+ * multi-line items stay readable. */
+.message-content ul,
+.message-content ol {
+  margin: 0 0 0.85em;
+  padding-left: 1.5em;
+}
+
+.message-content li {
+  margin: 0.25em 0;
+}
+
+.message-content li > p {
+  margin-bottom: 0.4em;
+}
+
+.message-content li::marker {
+  color: var(--text-muted);
+}
+
+.message-content ul ul,
+.message-content ol ol,
+.message-content ul ol,
+.message-content ol ul {
+  margin-bottom: 0;
+}
+
+/* Task lists rendered by Obsidian should not double-indent. */
+.message-content li.task-list-item {
+  list-style: none;
+  margin-left: -1.2em;
 }
 
 .message-content table {
   border-collapse: collapse;
-  margin-top: 15px;
-  margin-bottom: 15px;
+  margin: 0 0 1em;
+  width: auto;
+  font-size: 0.95em;
 }
 
 .message-content th,
 .message-content td {
   padding: var(--size-2-2) var(--size-4-2);
-  border: var(--table-border-width) solid var(--table-border-color);
+  text-align: left;
+}
+
+/* Horizontal rules only, no vertical grid: reads as a table without looking
+ * like a spreadsheet. */
+.message-content thead th {
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.message-content tbody tr + tr td {
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.message-content tbody tr:hover {
+  background-color: var(--background-modifier-hover);
 }
 
 .message-content th {
-  font-weight: var(--table-header-weight);
-  background-color: var(--table-header-background);
+  font-weight: var(--font-semibold);
+  background-color: transparent;
+  color: var(--text-normal);
 }
 
-/* Style for inline code */
+/* Blockquotes: a left rule and a muted tone, no fill. */
+.message-content blockquote {
+  margin: 0 0 1em;
+  padding: 0.1em 0 0.1em 1em;
+  border-left: 2px solid var(--background-modifier-border);
+  color: var(--text-muted);
+}
+
+.message-content blockquote > p:last-child {
+  margin-bottom: 0;
+}
+
+.message-content hr {
+  margin: 1.5em 0;
+  border: none;
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.message-content a {
+  color: var(--text-accent);
+  text-decoration: none;
+}
+
+.message-content a:hover {
+  color: var(--text-accent-hover);
+  text-decoration: underline;
+}
+
+/* Inline code: a subtle chip that stays inside the line height. */
 .message-content code {
   background-color: var(--code-background);
-  padding: 2px 4px;
-  border-radius: 3px;
+  padding: 0.15em 0.35em;
+  border-radius: var(--radius-s);
   color: var(--code-normal);
+  font-size: 0.88em;
 }
 
-/* Style for code blocks */
+/* Code blocks: filled surface, no outline, one action affordance on hover. */
 .message-content pre {
-  background-color: var(--background-primary-alt);
-  border-radius: 4px;
-  padding: 10px;
-  border: 1px solid var(--background-modifier-border);
+  position: relative;
+  margin: 0 0 1em;
+  padding: var(--size-4-3);
+  border: none;
+  border-radius: var(--radius-m);
+  background-color: var(--code-background);
+  overflow-x: auto;
 }
 
 .message-content pre code {
   background-color: transparent;
   padding: 0;
+  border-radius: 0;
   color: var(--code-normal);
-  line-height: 1.5 !important;
+  font-size: 0.88em;
+  line-height: 1.55;
   display: block;
-  white-space: pre-wrap;
-  word-wrap: break-word;
-  overflow-wrap: break-word;
+  white-space: pre;
+  word-wrap: normal;
+  overflow-wrap: normal;
 }
 
-/* Style for the copy button in code blocks */
-.message-content pre {
-  position: relative;
+.message-content img {
+  max-width: 100%;
+  height: auto;
+  border-radius: var(--radius-m);
 }
 
-.message-content pre .copy-code-button {
-  position: absolute;
-  top: 0;
-  right: 0;
-  padding: 4px 8px;
-  color: var(--text-muted);
-  background-color: var(--background-primary);
-  border: 1px solid var(--background-modifier-border);
-  border-radius: 0 4px 0 4px;
-  font-size: 0.8em;
-  transition: all 0.1s ease;
-  opacity: 0;
+/* Markdown-rendered callouts: flat tint, no outline. */
+.message-content .callout {
+  border: none;
+  border-radius: var(--radius-m);
+  margin: 0 0 1em;
+  padding: var(--size-4-2) var(--size-4-3);
 }
 
-.message-content pre:hover .copy-code-button {
-  opacity: 1;
-}
-
-.message-content pre .copy-code-button:hover {
-  background-color: var(--background-modifier-hover);
-  color: var(--text-normal);
-}
-
-.message-content ul,
-.message-content ol {
-  padding-left: 20px;
-  margin: 10px;
+.message-content math,
+.message-content .math {
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 .tool-call-container {
@@ -470,8 +585,94 @@ If your plugin does not need CSS, delete this file.
   width: 100%;
   height: auto;
   object-fit: contain;
-  border-radius: 8px;
-  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m);
+}
+
+/* ---------------------------------------------------------------------------
+ * Collapsible reasoning / tool-output blocks
+ *
+ * These were previously injected as inline styles from the message renderer,
+ * which made them impossible to theme consistently and violated the project's
+ * no-inline-styles rule. Styling lives here now.
+ * ------------------------------------------------------------------------ */
+
+.copilot-collapsible {
+  margin: 0.5rem 0 1.25rem;
+  padding: 0.75rem;
+  border-radius: var(--radius-m);
+  background-color: var(--background-secondary-alt);
+}
+
+.copilot-collapsible-summary {
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: 0.85em;
+  user-select: none;
+  list-style: none;
+}
+
+.copilot-collapsible-summary::-webkit-details-marker,
+.copilot-collapsible-summary::marker {
+  display: none;
+}
+
+.copilot-collapsible-summary::before {
+  content: "";
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  margin-right: 0.4em;
+  background-color: currentColor;
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9 18 6-6-6-6'/%3E%3C/svg%3E");
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m9 18 6-6-6-6'/%3E%3C/svg%3E");
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+  transition: transform 150ms ease;
+  transform-origin: center;
+}
+
+.copilot-collapsible[open] > .copilot-collapsible-summary::before {
+  transform: rotate(90deg);
+}
+
+.copilot-collapsible-summary:hover {
+  color: var(--text-normal);
+}
+
+.copilot-collapsible-body {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  border-radius: var(--radius-s);
+  background-color: var(--background-primary);
+  color: var(--text-muted);
+}
+
+.copilot-collapsible-streaming {
+  margin: 0.5rem 0 1.25rem;
+  padding: 0.75rem;
+  border-radius: var(--radius-m);
+  background-color: var(--background-secondary-alt);
+}
+
+.copilot-collapsible-streaming-label {
+  color: var(--text-muted);
+  font-size: 0.85em;
+  margin-bottom: 0.5rem;
+}
+
+.copilot-collapsible-streaming-body {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  border-radius: var(--radius-s);
+  background-color: var(--background-primary);
+  color: var(--text-muted);
 }
 
 .copilot-command-modal {
@@ -782,20 +983,6 @@ If your plugin does not need CSS, delete this file.
 
   .model-card-item .switch {
     margin: 0;
-  }
-
-  .model-select-content,
-  .chain-select-content {
-    background: var(--background-primary);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
-  }
-
-  .model-select-content [role="menuitem"],
-  .chain-select-content [role="menuitem"] {
-    background: var(--background-primary);
-    color: var(--text-normal);
-    padding: 8px 12px;
-    font-size: 14px;
   }
 
   .model-select-content [role="menuitem"]:hover,
@@ -1335,4 +1522,68 @@ body.is-mobile div[data-radix-popper-content-wrapper] {
 /* Gradient fade mask for truncated content */
 .copilot-fade-mask-bottom {
   background: linear-gradient(to top, var(--background-primary), transparent);
+}
+
+/* ---------------------------------------------------------------------------
+ * Generating indicator
+ *
+ * Reports stage + elapsed time while the model produces its first token. The
+ * dot pulse is pure CSS so the message list is not re-rendered several times a
+ * second just to advance an ellipsis.
+ * ------------------------------------------------------------------------ */
+
+.copilot-generating-indicator {
+  font-size: var(--font-ui-smaller);
+  line-height: 1.4;
+  min-height: 1.4em;
+}
+
+.copilot-generating-timer {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+.copilot-streaming-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.copilot-streaming-dots > span {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background-color: currentColor;
+  opacity: 0.35;
+  animation: copilot-dot-pulse 1.2s ease-in-out infinite;
+}
+
+.copilot-streaming-dots > span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.copilot-streaming-dots > span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+@keyframes copilot-dot-pulse {
+  0%,
+  60%,
+  100% {
+    opacity: 0.3;
+    transform: translateY(0);
+  }
+  30% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+}
+
+/* Respect users who prefer reduced motion: keep the dots visible but static. */
+@media (prefers-reduced-motion: reduce) {
+  .copilot-streaming-dots > span {
+    animation: none;
+    opacity: 0.6;
+  }
 }

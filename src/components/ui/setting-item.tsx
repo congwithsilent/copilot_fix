@@ -5,7 +5,7 @@ import { useTab } from "@/contexts/TabContext";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Textarea } from "@/components/ui/textarea";
 import { SettingSwitch } from "@/components/ui/setting-switch";
-import { ChevronDown } from "lucide-react";
+import { ObsidianNativeSelect } from "@/components/ui/obsidian-native-select";
 import {
   Dialog,
   DialogContent,
@@ -176,42 +176,20 @@ export function SettingItem(props: SettingItemProps) {
         );
 
       case "select":
+        // Delegates to the shared native-select primitive so the settings form
+        // and every other dropdown cannot drift apart stylistically.
         return (
-          <div className="tw-group tw-relative tw-w-full sm:tw-w-[200px]">
-            <select
-              value={props.value?.toString()}
-              onChange={(e) => props.onChange?.(e.target.value)}
-              disabled={disabled}
-              className={cn(
-                "tw-w-full tw-appearance-none",
-                "tw-flex tw-h-9 tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-dropdown tw-px-3 tw-py-1 tw-pr-8",
-                "tw-text-sm !tw-shadow tw-transition-colors",
-                "focus:tw-outline-none focus:tw-ring-1 focus:tw-ring-ring",
-                "disabled:tw-cursor-not-allowed disabled:tw-opacity-50",
-                "hover:tw-bg-interactive-hover hover:tw-text-normal"
-              )}
-            >
-              {props.placeholder && (
-                <option value="" disabled>
-                  {props.placeholder}
-                </option>
-              )}
-              {props.options.map((option) => (
-                <option key={option.value} value={option.value.toString()}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-            <div
-              className={cn(
-                "tw-pointer-events-none tw-absolute tw-inset-y-0 tw-right-0 tw-flex tw-items-center tw-pr-2",
-                "tw-transition-colors group-hover:[&>svg]:tw-text-normal",
-                disabled && "tw-opacity-50"
-              )}
-            >
-              <ChevronDown className="tw-size-4" />
-            </div>
-          </div>
+          <ObsidianNativeSelect
+            value={props.value?.toString()}
+            onChange={(e) => props.onChange?.(e.target.value)}
+            disabled={disabled}
+            placeholder={props.placeholder}
+            options={props.options.map((option) => ({
+              label: option.label,
+              value: option.value.toString(),
+            }))}
+            containerClassName="sm:tw-w-[200px]"
+          />
         );
 
       case "slider":

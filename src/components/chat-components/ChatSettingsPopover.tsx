@@ -221,7 +221,7 @@ export function ChatSettingsPopover() {
       <PopoverContent className="tw-w-80 tw-rounded-md tw-p-0" align="end">
         <div className="tw-flex tw-max-h-[500px] tw-flex-col">
           {/* Header with Reset - Fixed */}
-          <div className="tw-shrink-0 tw-border-b tw-px-4">
+          <div className="tw-shrink-0 tw-bg-secondary-alt tw-px-4">
             <div className="tw-flex tw-items-center tw-justify-between">
               <h3 className="tw-font-semibold">Chat Settings</h3>
               <Button variant="ghost" size="sm" onClick={handleReset} className="tw-h-8 tw-text-xs">
@@ -313,10 +313,7 @@ export function ChatSettingsPopover() {
                 </div>
 
                 {(disableBuiltin || showConfirmation) && (
-                  <div
-                    ref={confirmationRef}
-                    className="tw-rounded-md tw-border tw-bg-error/10 tw-p-3 tw-border-error/50"
-                  >
+                  <div ref={confirmationRef} className="tw-rounded-md tw-bg-error/10 tw-p-3">
                     <div className="tw-flex tw-gap-2">
                       <AlertTriangle className="tw-mt-0.5 tw-size-4 tw-shrink-0 tw-text-error" />
                       <div className="tw-flex-1 tw-space-y-2">

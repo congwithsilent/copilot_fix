@@ -268,7 +268,7 @@ export function ChatHistoryPopover({
       <PopoverTrigger asChild>{children}</PopoverTrigger>
       <PopoverContent className="tw-w-80 tw-p-0" align="end" side="top">
         <div className="tw-flex tw-max-h-[400px] tw-flex-col">
-          <div className="tw-shrink-0 tw-border-b tw-p-1">
+          <div className="tw-shrink-0 tw-bg-secondary-alt tw-p-1">
             <SearchBar value={searchQuery} onChange={setSearchQuery} />
           </div>
 
@@ -283,7 +283,7 @@ export function ChatHistoryPopover({
                   {groupedHistory.map((group) => (
                     <div
                       key={group.key}
-                      className="tw-mb-3 tw-border-x-[0px] tw-border-b tw-border-t-[0px] tw-border-border tw-pb-2"
+                      className="tw-mb-3 tw-pb-2"
                       style={{ borderBottomStyle: "solid" }}
                     >
                       <div className="tw-mb-2 tw-px-2 tw-text-xs tw-font-medium tw-tracking-wider tw-text-muted">

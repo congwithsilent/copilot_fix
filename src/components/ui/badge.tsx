@@ -11,7 +11,7 @@ const badgeVariants = cva(
         default: "tw-bg-primary-alt tw-shadow",
         secondary: "tw-bg-secondary-alt",
         destructive: "tw-bg-modifier-error tw-shadow",
-        outline: "tw-border tw-border-solid tw-border-border",
+        outline: "tw-bg-secondary-alt",
       },
     },
     defaultVariants: {

@@ -39,6 +39,7 @@ import { ChatXAI } from "@langchain/xai";
 import { MissingApiKeyError, MissingPlusLicenseError } from "@/error";
 import { Notice } from "obsidian";
 import { ChatOpenRouter } from "./ChatOpenRouter";
+import { ChatOpenAIFormat } from "./ChatOpenAIFormat";
 import { ChatLMStudio } from "./ChatLMStudio";
 import { BedrockChatModel, type BedrockChatModelFields } from "./BedrockChatModel";
 import { GitHubCopilotChatModel } from "@/LLMProviders/githubCopilot/GitHubCopilotChatModel";
@@ -73,8 +74,8 @@ const CHAT_PROVIDER_CONSTRUCTORS = {
   [ChatModelProviders.OLLAMA]: ChatOllama,
   [ChatModelProviders.LM_STUDIO]: ChatOpenRouter,
   [ChatModelProviders.GROQ]: ChatGroq,
-  [ChatModelProviders.OPENAI_FORMAT]: ChatOpenAI,
-  [ChatModelProviders.SILICONFLOW]: ChatOpenAI,
+  [ChatModelProviders.OPENAI_FORMAT]: ChatOpenAIFormat,
+  [ChatModelProviders.SILICONFLOW]: ChatOpenAIFormat,
   [ChatModelProviders.COPILOT_PLUS]: ChatOpenRouter,
   [ChatModelProviders.MISTRAL]: ChatMistralAI,
   [ChatModelProviders.DEEPSEEK]: ChatDeepSeek,

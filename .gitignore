@@ -31,3 +31,7 @@ data.json
 
 # Development session tracking
 TODO.md
+
+# Build output and tooling
+build-obsidian/
+.zcode/

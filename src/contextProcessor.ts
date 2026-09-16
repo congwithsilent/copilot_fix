@@ -32,6 +32,30 @@ interface MarkdownSegment {
   found: boolean;
 }
 
+/**
+ * Injects folder metadata into markdown frontmatter for notes included via folder context.
+ * If frontmatter exists, inserts `folder: <folderPath>` into it.
+ * If no frontmatter exists, prepends a new frontmatter block.
+ */
+export function injectFolderFrontmatter(content: string, folderPath: string): string {
+  const normalizedFolderPath = folderPath.replace(/^\/+|\/+$/g, "");
+  const frontmatterRegex = /^---\r?\n([\s\S]*?)\r?\n---(\r?\n|$)/;
+  const match = frontmatterRegex.exec(content);
+
+  if (match) {
+    const frontmatterBody = match[1];
+    // If folder is already defined in frontmatter, keep it
+    if (/^folder:/m.test(frontmatterBody)) {
+      return content;
+    }
+    // Prepend folder: <path> right under the opening ---
+    return content.replace(/^---\r?\n/, `---\nfolder: ${normalizedFolderPath}\n`);
+  }
+
+  // No existing frontmatter: prepend frontmatter block
+  return `---\nfolder: ${normalizedFolderPath}\n---\n\n${content}`;
+}
+
 export class ContextProcessor {
   private static instance: ContextProcessor;
 
@@ -513,19 +537,16 @@ export class ContextProcessor {
   }
 
   /**
-   * Processes context notes, excluding any already handled by custom prompts.
+   * Process and format the context notes.
    *
-   * NOTE: This method reads and includes note content as-is. URLs within note content
-   * are NOT extracted or processed with url4llm. Only URLs directly typed in the user's
-   * chat input are processed, not URLs that happen to be in the content of context notes.
-   *
-   * @param excludedNotePaths A set of file paths that should be skipped.
+   * @param excludedNotePaths
    * @param fileParserManager
    * @param vault
    * @param contextNotes
    * @param includeActiveNote
    * @param activeNote
    * @param currentChain
+   * @param folderPath Optional folder path if notes are being processed as folder context
    * @returns The combined content string of the processed context notes.
    */
   async processContextNotes(
@@ -535,7 +556,8 @@ export class ContextProcessor {
     contextNotes: TFile[],
     includeActiveNote: boolean,
     activeNote: TFile | null,
-    currentChain: ChainType
+    currentChain: ChainType,
+    folderPath?: string
   ): Promise<string> {
     let additionalContext = "";
 
@@ -563,17 +585,25 @@ export class ContextProcessor {
         }
 
         // 3. If we reach here, parse the file (md, canvas, or other supported type in Plus mode)
-        const content =
+        let content =
           note.extension === "md"
             ? await this.buildMarkdownContextContent(note, vault, fileParserManager, currentChain)
             : await fileParserManager.parseFile(note, vault);
+
+        if (folderPath && note.extension === "md") {
+          content = injectFolderFrontmatter(content, folderPath);
+        }
 
         // Get file metadata
         const stats = await vault.adapter.stat(note.path);
         const ctime = stats ? new Date(stats.ctime).toISOString() : "Unknown";
         const mtime = stats ? new Date(stats.mtime).toISOString() : "Unknown";
 
-        additionalContext += `\n\n<${prompt_tag}>\n<title>${escapeXml(note.basename)}</title>\n<path>${note.path}</path>\n<ctime>${ctime}</ctime>\n<mtime>${mtime}</mtime>\n<content>\n${content}\n</content>\n</${prompt_tag}>`;
+        const folderTag = folderPath
+          ? `\n<folder>${escapeXml(folderPath.replace(/^\/+|\/+$/g, ""))}</folder>`
+          : "";
+
+        additionalContext += `\n\n<${prompt_tag}>\n<title>${escapeXml(note.basename)}</title>\n<path>${note.path}</path>${folderTag}\n<ctime>${ctime}</ctime>\n<mtime>${mtime}</mtime>\n<content>\n${content}\n</content>\n</${prompt_tag}>`;
       } catch (error) {
         logError(`Error processing file ${note.path}:`, error);
         additionalContext += `\n\n<${prompt_tag}_error>\n<title>${escapeXml(note.basename)}</title>\n<path>${note.path}</path>\n<error>[Error: Could not process file]</error>\n</${prompt_tag}_error>`;

@@ -27,10 +27,11 @@ import { App, Notice, TFile } from "obsidian";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { $getSelection, $isRangeSelection } from "lexical";
 import { ContextControl } from "./ContextControl";
-import { $removePillsByPath } from "./pills/NotePillNode";
+import { GeneratingIndicator } from "./GeneratingIndicator";
+import { $removePillsByPath, $findNotePills } from "./pills/NotePillNode";
 import { $removeActiveNotePills } from "./pills/ActiveNotePillNode";
 import { $removePillsByURL } from "./pills/URLPillNode";
-import { $removePillsByFolder } from "./pills/FolderPillNode";
+import { $removePillsByFolder, $findFolderPills } from "./pills/FolderPillNode";
 import { $removePillsByToolName, $createToolPillNode } from "./pills/ToolPillNode";
 import { $removeActiveWebTabPills } from "./pills/ActiveWebTabPillNode";
 import { $findWebTabPills, $removeWebTabPillsByUrl } from "./pills/WebTabPillNode";
@@ -47,6 +48,8 @@ interface ChatInputProps {
     webTabs?: WebTabContext[];
   }) => void;
   isGenerating: boolean;
+  /** Current generation stage label, such as "Reading files". */
+  loadingMessage?: string;
   onStopGenerating: () => void;
   app: App;
   contextNotes: TFile[];
@@ -88,6 +91,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
   setInputMessage,
   handleSendMessage,
   isGenerating,
+  loadingMessage,
   onStopGenerating,
   app,
   contextNotes,
@@ -157,6 +161,45 @@ const ChatInput: React.FC<ChatInputProps> = ({
     });
   };
 
+  /**
+   * Extract FolderPillNode paths directly from the Lexical editor at send time.
+   * This avoids React state synchronization races (foldersFromPills) when the user sends quickly.
+   */
+  const getFoldersFromEditorSnapshot = (): string[] => {
+    const editor = lexicalEditorRef.current;
+    if (!editor) {
+      return foldersFromPills;
+    }
+
+    return editor.read(() => {
+      const pills = $findFolderPills();
+      return pills.map((pill) => pill.getValue());
+    });
+  };
+
+  /**
+   * Extract NotePillNode files directly from the Lexical editor at send time.
+   * This avoids React state synchronization races (notesFromPills) when the user sends quickly.
+   */
+  const getNotesFromEditorSnapshot = (): TFile[] => {
+    const editor = lexicalEditorRef.current;
+    if (!editor) {
+      return [];
+    }
+
+    return editor.read(() => {
+      const pills = $findNotePills();
+      const files: TFile[] = [];
+      for (const pill of pills) {
+        const file = app.vault.getAbstractFileByPath(pill.getNotePath());
+        if (file instanceof TFile) {
+          files.push(file);
+        }
+      }
+      return files;
+    });
+  };
+
   // Toggle states for vault, web search, composer, and autonomous agent
   const [vaultToggle, setVaultToggle] = useState(false);
   const [webToggle, setWebToggle] = useState(false);
@@ -220,15 +263,16 @@ const ChatInput: React.FC<ChatInputProps> = ({
   };
 
   const onSendMessage = () => {
-    // Handle edit mode
-    if (editMode && onEditSave) {
-      onEditSave(inputMessage, {
-        notes: contextNotes,
-        urls: contextUrls,
-        folders: contextFolders,
-      });
-      return;
-    }
+    // Combine badge-only folders with the send-time Lexical snapshot of Folder pills.
+    // This avoids React state synchronization races when the user sends quickly.
+    const foldersFromEditor = getFoldersFromEditorSnapshot();
+    const allFolders = Array.from(new Set([...contextFolders, ...foldersFromEditor]));
+
+    // Combine badge-only notes with the send-time Lexical snapshot of Note pills.
+    const notesFromEditor = getNotesFromEditorSnapshot();
+    const allNotes = Array.from(
+      new Map([...contextNotes, ...notesFromEditor].map((n) => [n.path, n])).values()
+    );
 
     // Combine badge-only web tabs with the send-time Lexical snapshot of WebTab pills.
     // This avoids React state synchronization races when the user sends quickly.
@@ -236,13 +280,12 @@ const ChatInput: React.FC<ChatInputProps> = ({
     const webTabsFromEditor = getWebTabsFromEditorSnapshot();
     const allWebTabs = mergeWebTabContexts([...contextWebTabs, ...webTabsFromEditor]);
 
-    if (!isCopilotPlus) {
-      // Non-Plus chains: only webTabs needs explicit passing
-      // - contextNotes: Chat.tsx has state, closure can access
-      // - contextFolders: {folderPath} in text gets expanded by processPrompt()
-      // - webTabs: passed here, Active Web Tab injected by ChatManager
-      handleSendMessage({
-        webTabs: allWebTabs,
+    // Handle edit mode
+    if (editMode && onEditSave) {
+      onEditSave(inputMessage, {
+        notes: allNotes,
+        urls: contextUrls,
+        folders: allFolders,
       });
       return;
     }
@@ -268,9 +311,9 @@ const ChatInput: React.FC<ChatInputProps> = ({
 
     handleSendMessage({
       toolCalls,
-      contextNotes,
+      contextNotes: allNotes,
       urls: contextUrls,
-      contextFolders,
+      contextFolders: allFolders,
       webTabs: allWebTabs,
     });
   };
@@ -713,7 +756,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
 
   return (
     <div
-      className="tw-flex tw-w-full tw-flex-col tw-gap-0.5 tw-rounded-md tw-border tw-border-solid tw-border-border tw-px-1 tw-pb-1 tw-pt-2 tw-@container/chat-input"
+      className="tw-flex tw-w-full tw-flex-col tw-gap-0.5 tw-rounded-lg tw-bg-secondary-alt tw-px-1 tw-pb-1 tw-pt-2 tw-transition-colors tw-@container/chat-input focus-within:tw-bg-secondary"
       ref={containerRef}
     >
       {/* Hide context controls in edit mode - editing only changes text, not context */}
@@ -796,10 +839,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
 
       <div className="tw-flex tw-h-6 tw-justify-between tw-gap-1 tw-px-1">
         {isGenerating ? (
-          <div className="tw-flex tw-items-center tw-gap-1 tw-px-1 tw-text-sm tw-text-muted">
-            <Loader2 className="tw-size-3 tw-animate-spin" />
-            <span>Generating...</span>
-          </div>
+          <GeneratingIndicator isGenerating={isGenerating} loadingMessage={loadingMessage} />
         ) : (
           <div className="tw-min-w-0 tw-flex-1">
             <ModelSelector

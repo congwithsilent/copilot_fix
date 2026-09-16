@@ -25,9 +25,9 @@ export function ObsidianNativeSelect({
       <select
         className={cn(
           "tw-w-full tw-appearance-none",
-          "tw-flex tw-h-9 tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-dropdown tw-px-3 tw-py-1 tw-pr-8",
-          "tw-text-sm tw-shadow tw-transition-colors",
-          "focus:tw-outline-none focus:tw-ring-1 focus:tw-ring-ring",
+          "tw-flex tw-h-9 tw-rounded-md tw-bg-dropdown tw-px-3 tw-py-1 tw-pr-8",
+          "tw-text-sm tw-transition-colors",
+          "focus:tw-outline-none",
           "disabled:tw-cursor-not-allowed disabled:tw-opacity-50",
           "hover:tw-bg-interactive-hover hover:tw-text-normal",
           className

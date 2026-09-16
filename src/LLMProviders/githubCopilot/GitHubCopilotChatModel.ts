@@ -3,42 +3,15 @@ import { ChatOpenAICompletions } from "@langchain/openai";
 import { COPILOT_API_BASE, GitHubCopilotProvider } from "./GitHubCopilotProvider";
 import type { FetchImplementation } from "@/utils";
 import { extractTextFromChunk } from "@/utils";
+import { normalizeDeltaContent } from "@/LLMProviders/openaiDeltaUtils";
 
 // Approximate characters per token for English text
 const CHARS_PER_TOKEN = 4;
 
-/**
- * Normalize delta.content to a string.
- *
- * Reason: GitHub Copilot proxies multiple model families (Claude, GPT, etc.).
- * Claude models may return streaming delta.content as an array of content parts
- * (e.g., `[{type: "text", text: "..."}]`) instead of a plain string.
- * ChatOpenAICompletions' `_streamResponseChunks` skips chunks with non-string
- * content, causing all text to be silently dropped. This normalizer ensures
- * content is always a string before it reaches that check.
- */
-function normalizeDeltaContent(content: unknown): string {
-  if (typeof content === "string") return content;
-  if (content == null) return "";
-  if (Array.isArray(content)) {
-    return content
-      .map((part) => {
-        if (typeof part === "string") return part;
-        if (part && typeof part === "object" && typeof part.text === "string") {
-          return part.text;
-        }
-        return "";
-      })
-      .join("");
-  }
-  if (typeof content === "object" && typeof (content as any).text === "string") {
-    return (content as any).text;
-  }
-  return "";
-}
-
 /** Extract the constructor fields type from ChatOpenAICompletions. */
-type ChatOpenAICompletionsFields = NonNullable<ConstructorParameters<typeof ChatOpenAICompletions>[0]>;
+type ChatOpenAICompletionsFields = NonNullable<
+  ConstructorParameters<typeof ChatOpenAICompletions>[0]
+>;
 
 /**
  * Constructor params for GitHubCopilotChatModel.

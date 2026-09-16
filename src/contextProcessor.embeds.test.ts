@@ -6,7 +6,7 @@ jest.mock("@/chainFactory", () => ({
   },
 }));
 
-import { ContextProcessor } from "@/contextProcessor";
+import { ContextProcessor, injectFolderFrontmatter } from "@/contextProcessor";
 import { EMBEDDED_NOTE_TAG } from "@/constants";
 import { ChainType } from "@/chainFactory";
 import { TFile, Vault } from "obsidian";
@@ -199,5 +199,52 @@ describe("ContextProcessor - Embedded Notes", () => {
     );
 
     expect(result).toContain("<error>Embedded note not found</error>");
+  });
+
+  describe("injectFolderFrontmatter", () => {
+    it("should prepend frontmatter when none exists", () => {
+      const content = "# Title\nSome content";
+      const result = injectFolderFrontmatter(content, "journal");
+      expect(result).toBe("---\nfolder: journal\n---\n\n# Title\nSome content");
+    });
+
+    it("should insert folder into existing frontmatter", () => {
+      const content = "---\ntitle: Note\ntags: [a, b]\n---\nBody";
+      const result = injectFolderFrontmatter(content, "journal");
+      expect(result).toBe("---\nfolder: journal\ntitle: Note\ntags: [a, b]\n---\nBody");
+    });
+
+    it("should not duplicate existing folder in frontmatter", () => {
+      const content = "---\nfolder: existing\n---\nBody";
+      const result = injectFolderFrontmatter(content, "journal");
+      expect(result).toBe("---\nfolder: existing\n---\nBody");
+    });
+
+    it("should normalize folder path with leading/trailing slashes", () => {
+      const content = "Hello";
+      const result = injectFolderFrontmatter(content, "/journal/subfolder/");
+      expect(result).toBe("---\nfolder: journal/subfolder\n---\n\nHello");
+    });
+  });
+
+  it("should inject folder frontmatter and <folder> tag when folderPath is passed to processContextNotes", async () => {
+    const source = createMockFile("journal/Note1.md");
+    registerFile(source, "# Daily Note", {});
+
+    const result = await contextProcessor.processContextNotes(
+      new Set(),
+      fileParserManager,
+      vault,
+      [source],
+      false,
+      null,
+      ChainType.LLM_CHAIN,
+      "journal"
+    );
+
+    expect(result).toContain("<folder>journal</folder>");
+    expect(result).toContain("---");
+    expect(result).toContain("folder: journal");
+    expect(result).toContain("# Daily Note");
   });
 });

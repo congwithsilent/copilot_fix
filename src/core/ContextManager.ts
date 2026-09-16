@@ -180,31 +180,35 @@ export class ContextManager {
       const folderNotePaths: string[] = [];
 
       if (contextFolders.length > 0) {
-        // Get all notes from the specified folders
-        const folderNotes = contextFolders.flatMap((folder) => getNotesFromPath(vault, folder));
+        // Process each folder so notes receive accurate folder context and frontmatter
+        for (const folder of contextFolders) {
+          const folderNotes = getNotesFromPath(vault, folder);
 
-        // Filter out already processed notes to avoid duplication
-        const filteredFolderNotes = folderNotes.filter(
-          (note) => !processedNotePaths.has(note.path)
-        );
-
-        if (filteredFolderNotes.length > 0) {
-          folderContextAddition = await this.contextProcessor.processContextNotes(
-            new Set(), // Don't exclude any notes since we already filtered
-            fileParserManager,
-            vault,
-            filteredFolderNotes,
-            false, // Don't include active note again
-            null,
-            chainType
+          // Filter out already processed notes to avoid duplication
+          const filteredFolderNotes = folderNotes.filter(
+            (note) => !processedNotePaths.has(note.path)
           );
 
-          // Add processed folder notes to tracking sets and collect paths
-          filteredFolderNotes.forEach((note) => {
-            processedNotePaths.add(note.path);
-            l3ContextPaths.add(note.path);
-            folderNotePaths.push(note.path);
-          });
+          if (filteredFolderNotes.length > 0) {
+            const addition = await this.contextProcessor.processContextNotes(
+              new Set(), // Don't exclude any notes since we already filtered
+              fileParserManager,
+              vault,
+              filteredFolderNotes,
+              false, // Don't include active note again
+              null,
+              chainType,
+              folder
+            );
+            folderContextAddition += addition;
+
+            // Add processed folder notes to tracking sets and collect paths
+            filteredFolderNotes.forEach((note) => {
+              processedNotePaths.add(note.path);
+              l3ContextPaths.add(note.path);
+              folderNotePaths.push(note.path);
+            });
+          }
         }
       }
 

@@ -61,7 +61,7 @@ const SettingsContent: React.FC = () => {
           />
         ))}
       </div>
-      <div className="tw-w-full tw-border tw-border-solid" />
+      <div className="tw-h-px tw-w-full tw-bg-[var(--background-modifier-border)]" />
 
       <div>
         {TAB_IDS.map((id) => {

@@ -45,6 +45,7 @@ import {
   getMessageCollapsibleStates,
   isEventWithinDetailsSummary,
 } from "@/components/chat-components/collapsibleStateUtils";
+import { findStableMarkdownBoundary } from "@/components/chat-components/utils/streamingMarkdownBoundary";
 
 const FOOTNOTE_SUFFIX_PATTERN = /^\d+-\d+$/;
 
@@ -311,6 +312,16 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
   const contentRef = useRef<HTMLDivElement>(null);
   const componentRef = useRef<Component | null>(null);
   const isUnmountingRef = useRef<boolean>(false);
+  /**
+   * Frozen markdown prefix per text segment, keyed by the segment's ordinal
+   * within the message.
+   *
+   * While streaming, a segment's already-complete markdown is rendered once and
+   * kept; only the trailing fragment is re-rendered as new tokens arrive. This
+   * avoids rebuilding tables, code fences, and math on every chunk, which is
+   * both quadratic and visibly flickery.
+   */
+  const renderedStablePrefixRef = useRef<Map<number, string>>(new Map());
   // Use a stable ID for the message to preserve tool call roots across re-renders
   // Prefer message.id (persistent) over timestamp.epoch (regenerated on load)
   const messageId = useRef(
@@ -365,11 +376,6 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         summaryText: string,
         streamingSummaryText: string
       ): string => {
-        // Common styles as template strings
-        const detailsStyle = `margin: 0.5rem 0 1.5rem; padding: 0.75rem; border: 1px solid var(--background-modifier-border); border-radius: 4px; background-color: var(--background-secondary)`;
-        const summaryStyle = `cursor: pointer; color: var(--text-muted); font-size: 0.8em; margin-bottom: 0.5rem; user-select: none`;
-        const contentStyle = `margin-top: 0.75rem; padding: 0.75rem; border-radius: 4px; background-color: var(--background-primary)`;
-
         const openTag = `<${tagName}>`;
         let sectionIndex = 0;
 
@@ -384,9 +390,9 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
             // Check if user has explicitly set a state; if not, default to collapsed (original behavior)
             const openAttribute = collapsibleOpenStateMap.get(domId) ? " open" : "";
 
-            return `<details id="${domId}"${openAttribute} style="${detailsStyle}">
-              <summary style="${summaryStyle}">${summaryText}</summary>
-              <div class="tw-text-muted" style="${contentStyle}">${sectionContent.trim()}</div>
+            return `<details id="${domId}" class="copilot-collapsible"${openAttribute}>
+              <summary class="copilot-collapsible-summary">${summaryText}</summary>
+              <div class="copilot-collapsible-body">${sectionContent.trim()}</div>
             </details>\n\n`;
           });
 
@@ -394,9 +400,9 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
           const unClosedRegex = new RegExp(`<${tagName}>([\\s\\S]*)$`);
           content = content.replace(
             unClosedRegex,
-            (_match, partialContent) => `<div style="${detailsStyle}">
-              <div style="${summaryStyle}">${streamingSummaryText}</div>
-              <div class="tw-text-muted" style="${contentStyle}">${partialContent.trim()}</div>
+            (_match, partialContent) => `<div class="copilot-collapsible-streaming">
+              <div class="copilot-collapsible-streaming-label">${streamingSummaryText}</div>
+              <div class="copilot-collapsible-streaming-body">${partialContent.trim()}</div>
             </div>`
           );
           return content;
@@ -411,9 +417,9 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
           // Restore open state from previous render
           const openAttribute = collapsibleOpenStateMap.get(domId) ? " open" : "";
 
-          return `<details id="${domId}"${openAttribute} style="${detailsStyle}">
-            <summary style="${summaryStyle}">${summaryText}</summary>
-            <div class="tw-text-muted" style="${contentStyle}">${sectionContent.trim()}</div>
+          return `<details id="${domId}" class="copilot-collapsible"${openAttribute}>
+            <summary class="copilot-collapsible-summary">${summaryText}</summary>
+            <div class="copilot-collapsible-body">${sectionContent.trim()}</div>
           </details>\n\n`;
         });
       };
@@ -558,6 +564,99 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
     [app, isStreaming, settings.enableInlineCitations, collapsibleOpenStateMap]
   );
 
+  /**
+   * Find a direct child of `container` carrying the given class.
+   *
+   * Direct-child lookup avoids matching same-named classes that model output
+   * could have produced inside the rendered markdown.
+   *
+   * @param container Parent element.
+   * @param className Class to match.
+   * @returns The matching child, or null.
+   */
+  const findDirectChild = (container: HTMLElement, className: string): HTMLElement | null => {
+    for (const child of Array.from(container.children)) {
+      if (child.classList.contains(className)) {
+        return child as HTMLElement;
+      }
+    }
+    return null;
+  };
+
+  /**
+   * Render one markdown segment into its container, reusing already-rendered
+   * output while streaming.
+   *
+   * The segment is split at the last structurally complete blank line. While the
+   * boundary does not move, only the trailing fragment is re-rendered and the
+   * frozen prefix is left untouched — so completed blocks (tables, code fences,
+   * math) are not torn down and rebuilt on every chunk, which is both quadratic
+   * and visibly flickery. When the boundary advances (or the content changes
+   * shape through an edit or regeneration), the prefix is re-rendered once.
+   *
+   * @param content Markdown for this segment.
+   * @param container Element that owns the segment's rendered output.
+   * @param ordinal Position of this text segment within the message.
+   */
+  const renderSegmentMarkdown = useCallback(
+    (content: string, container: HTMLElement, ordinal: number): void => {
+      if (!isStreaming) {
+        // Final state: render the segment once, in full, and drop any memo.
+        container.replaceChildren();
+        renderedStablePrefixRef.current.delete(ordinal);
+        if (content) {
+          MarkdownRenderer.renderMarkdown(content, container, "", componentRef.current!);
+          normalizeFootnoteRendering(container);
+        }
+        return;
+      }
+
+      const previousStable = renderedStablePrefixRef.current.get(ordinal);
+      const boundary = findStableMarkdownBoundary(content);
+      const stablePrefix = content.slice(0, boundary);
+      const unstableTail = content.slice(boundary);
+
+      let stableDiv = findDirectChild(container, "message-segment-stable");
+      let tailDiv = findDirectChild(container, "message-segment-tail");
+
+      // Re-render the frozen prefix only when it actually changed. While the
+      // boundary holds steady this branch is skipped entirely.
+      if (stablePrefix !== previousStable) {
+        if (stablePrefix) {
+          if (!stableDiv) {
+            stableDiv = document.createElement("div");
+            stableDiv.className = "message-segment-stable";
+            // Keep the prefix ahead of the tail.
+            container.insertBefore(stableDiv, tailDiv);
+          }
+          stableDiv.replaceChildren();
+          MarkdownRenderer.renderMarkdown(stablePrefix, stableDiv, "", componentRef.current!);
+          normalizeFootnoteRendering(stableDiv);
+        } else if (stableDiv) {
+          stableDiv.remove();
+          stableDiv = null;
+        }
+        renderedStablePrefixRef.current.set(ordinal, stablePrefix);
+      }
+
+      // The tail is re-rendered on every pass; markdown is still being written
+      // to it, so its rendering is expected to change.
+      if (unstableTail) {
+        if (!tailDiv) {
+          tailDiv = document.createElement("div");
+          tailDiv.className = "message-segment-tail";
+          container.appendChild(tailDiv);
+        }
+        tailDiv.replaceChildren();
+        MarkdownRenderer.renderMarkdown(unstableTail, tailDiv, "", componentRef.current!);
+        normalizeFootnoteRendering(tailDiv);
+      } else if (tailDiv) {
+        tailDiv.remove();
+      }
+    },
+    [componentRef, isStreaming]
+  );
+
   // Persist collapsible open/closed state during streaming in real time.
   // Streaming updates can rebuild the markdown DOM between pointer down/up, preventing a click.
   useEffect(() => {
@@ -675,28 +774,42 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
           existingErrorIds.add(id);
         });
 
-        // Clear only text content divs, preserve tool call and error block containers
-        const textDivs = contentRef.current.querySelectorAll(".message-segment");
-        textDivs.forEach((div) => div.remove());
+        // Reuse existing text segment elements by ordinal. Reusing the element
+        // (rather than removing and recreating it) is what lets an already
+        // rendered stable prefix survive a streaming update untouched.
+        const existingSegmentEls = new Map<number, HTMLElement>();
+        contentRef.current.querySelectorAll<HTMLElement>(".message-segment").forEach((el) => {
+          const ordinal = Number(el.dataset.segmentIndex);
+          if (!Number.isNaN(ordinal)) {
+            existingSegmentEls.set(ordinal, el);
+          }
+        });
 
         // Process segments and only update what's needed
         let currentIndex = 0;
+        let textSegmentOrdinal = 0;
+        const reusedSegmentOrdinals = new Set<number>();
+
         parsedMessage.segments.forEach((segment) => {
           if (segment.type === "text" && segment.content.trim()) {
-            // Find where to insert this text segment
-            const insertBefore = contentRef.current!.children[currentIndex];
+            const ordinal = textSegmentOrdinal++;
+            let textDiv = existingSegmentEls.get(ordinal);
 
-            const textDiv = document.createElement("div");
-            textDiv.className = "message-segment";
-
-            if (insertBefore) {
-              contentRef.current!.insertBefore(textDiv, insertBefore);
-            } else {
-              contentRef.current!.appendChild(textDiv);
+            if (!textDiv) {
+              textDiv = document.createElement("div");
+              textDiv.className = "message-segment";
+              textDiv.dataset.segmentIndex = String(ordinal);
             }
 
-            MarkdownRenderer.renderMarkdown(segment.content, textDiv, "", componentRef.current!);
-            normalizeFootnoteRendering(textDiv);
+            // Position the segment at the current stream position. Skipped when
+            // the element is already the node at that position.
+            const insertBefore = contentRef.current!.children[currentIndex] ?? null;
+            if (insertBefore !== textDiv) {
+              contentRef.current!.insertBefore(textDiv, insertBefore);
+            }
+
+            reusedSegmentOrdinals.add(ordinal);
+            renderSegmentMarkdown(segment.content, textDiv, ordinal);
             currentIndex++;
           } else if (segment.type === "toolCall" && segment.toolCall) {
             const toolCallId = segment.toolCall.id;
@@ -767,6 +880,14 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
           }
         });
 
+        // Drop text segments that no longer correspond to a segment in the
+        // current parse (message shortened by an edit or regeneration).
+        existingSegmentEls.forEach((el, ordinal) => {
+          if (!reusedSegmentOrdinals.has(ordinal)) {
+            el.remove();
+          }
+        });
+
         // Clean up any tool calls that no longer exist
         const currentToolCallIds = new Set(
           parsedMessage.segments
@@ -819,7 +940,15 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
     return () => {
       isUnmountingRef.current = true;
     };
-  }, [message, app, componentRef, isStreaming, preprocess, collapsibleOpenStateMap]);
+  }, [
+    message,
+    app,
+    componentRef,
+    isStreaming,
+    preprocess,
+    collapsibleOpenStateMap,
+    renderSegmentMarkdown,
+  ]);
 
   // Cleanup effect that only runs on component unmount
   useEffect(() => {
@@ -902,7 +1031,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
               return (
                 <div key={index}>
                   {message.sender === USER_SENDER ? (
-                    <div className="tw-whitespace-pre-wrap tw-break-words tw-text-[calc(var(--font-text-size)_-_2px)] tw-font-normal">
+                    <div className="copilot-chat-text tw-whitespace-pre-wrap tw-break-words tw-font-normal">
                       {message.message}
                     </div>
                   ) : (
@@ -932,7 +1061,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
 
     // Fallback for messages without content array
     return message.sender === USER_SENDER ? (
-      <div className="tw-whitespace-pre-wrap tw-break-words tw-text-[calc(var(--font-text-size)_-_2px)] tw-font-normal">
+      <div className="copilot-chat-text tw-whitespace-pre-wrap tw-break-words tw-font-normal">
         {message.message}
       </div>
     ) : (
@@ -959,8 +1088,8 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
     <div className="tw-my-1 tw-flex tw-w-full tw-flex-col">
       <div
         className={cn(
-          "tw-group tw-mx-2 tw-rounded-md tw-p-2",
-          message.sender === USER_SENDER && "tw-border tw-border-solid tw-border-border"
+          "tw-group tw-mx-2 tw-rounded-lg tw-p-2",
+          message.sender === USER_SENDER && "tw-bg-secondary-alt"
         )}
         style={
           message.sender === USER_SENDER

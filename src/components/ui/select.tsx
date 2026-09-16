@@ -17,10 +17,10 @@ const SelectTrigger = React.forwardRef<
   <SelectPrimitive.Trigger
     ref={ref}
     className={cn(
-      "tw-border-solid !tw-bg-dropdown !tw-shadow-sm tw-transition-colors",
-      "focus-visible:tw-shadow-sm focus-visible:tw-outline-none focus-visible:tw-ring-1 focus-visible:tw-ring-ring",
+      "!tw-bg-dropdown tw-transition-colors",
+      "focus-visible:tw-outline-none",
       "hover:data-[state=closed]:!tw-bg-interactive-accent hover:data-[state=closed]:!tw-text-on-accent", // custom styles
-      "tw-flex tw-h-9 tw-w-full tw-items-center tw-justify-between tw-whitespace-nowrap tw-rounded-md tw-border tw-border-border tw-px-3 tw-py-1 tw-text-sm tw-ring-offset-ring placeholder:tw-text-muted focus:tw-outline-none focus:tw-ring-1 focus:tw-ring-ring disabled:tw-cursor-not-allowed disabled:tw-opacity-50 [&>span]:tw-line-clamp-1",
+      "tw-flex tw-h-9 tw-w-full tw-items-center tw-justify-between tw-whitespace-nowrap tw-rounded-md tw-px-3 tw-py-1 tw-text-sm placeholder:tw-text-muted focus:tw-outline-none disabled:tw-cursor-not-allowed disabled:tw-opacity-50 [&>span]:tw-line-clamp-1",
       className
     )}
     {...props}
@@ -71,7 +71,7 @@ const SelectContent = React.forwardRef<
     <SelectPrimitive.Content
       ref={ref}
       className={cn(
-        "tw-relative tw-z-modal tw-max-h-96 tw-min-w-32 tw-overflow-hidden tw-rounded-md tw-border tw-bg-primary tw-text-normal tw-shadow-md data-[state=open]:tw-animate-in data-[state=closed]:tw-animate-out data-[state=closed]:tw-fade-out-0 data-[state=open]:tw-fade-in-0 data-[state=closed]:tw-zoom-out-95 data-[state=open]:tw-zoom-in-95 data-[side=bottom]:tw-slide-in-from-top-2 data-[side=left]:tw-slide-in-from-right-2 data-[side=right]:tw-slide-in-from-left-2 data-[side=top]:tw-slide-in-from-bottom-2",
+        "tw-relative tw-z-modal tw-max-h-96 tw-min-w-32 tw-overflow-hidden tw-rounded-md tw-bg-primary tw-text-normal tw-shadow-md data-[state=open]:tw-animate-in data-[state=closed]:tw-animate-out data-[state=closed]:tw-fade-out-0 data-[state=open]:tw-fade-in-0 data-[state=closed]:tw-zoom-out-95 data-[state=open]:tw-zoom-in-95 data-[side=bottom]:tw-slide-in-from-top-2 data-[side=left]:tw-slide-in-from-right-2 data-[side=right]:tw-slide-in-from-left-2 data-[side=top]:tw-slide-in-from-bottom-2",
         position === "popper" &&
           "data-[side=bottom]:tw-translate-y-1 data-[side=left]:-tw-translate-x-1 data-[side=right]:tw-translate-x-1 data-[side=top]:-tw-translate-y-1",
         className

@@ -72,6 +72,31 @@ export class ThinkBlockStreamer {
   }
 
   /**
+   * Join the text around a removed think block without disturbing the answer's
+   * own whitespace.
+   *
+   * The removed region acts as a boundary marker, not as content. Exactly one
+   * newline is kept at the join when either side supplied one, so paragraph
+   * breaks around the block survive while blank lines and indentation inside
+   * `after` are preserved verbatim. Using `trimStart()` here would eat the
+   * leading indentation of a code block that follows a think block.
+   *
+   * @param before Text preceding the block.
+   * @param after Text following the block.
+   * @returns The stitched text.
+   */
+  private joinAroundRemovedBlock(before: string, after: string): string {
+    const beforeHasNewline = before.endsWith("\n");
+    const afterHasNewline = after.startsWith("\n");
+
+    const beforeTrimmed = beforeHasNewline ? before.slice(0, -1) : before;
+    const afterTrimmed = afterHasNewline ? after.slice(1) : after;
+    const separator = beforeHasNewline || afterHasNewline ? "\n" : "";
+
+    return beforeTrimmed + separator + afterTrimmed;
+  }
+
+  /**
    * Strip text-level think tags when excludeThinking is true.
    * Handles three streaming states:
    * 1. Not inside a think block -- look for `<think>` to enter one
@@ -86,7 +111,7 @@ export class ThinkBlockStreamer {
         // Block closed -- stitch content before and after the block
         const before = this.fullResponse.substring(0, this.excludedThinkBlockStart);
         const after = this.fullResponse.substring(closeIdx + "</think>".length);
-        this.fullResponse = (before + after).trimStart();
+        this.fullResponse = this.joinAroundRemovedBlock(before, after);
         this.excludedThinkBlockStart = -1;
       } else {
         // Still streaming thinking -- truncate to the safe prefix
@@ -104,7 +129,7 @@ export class ThinkBlockStreamer {
         // Complete block in one pass
         const before = this.fullResponse.substring(0, openIdx);
         const after = this.fullResponse.substring(closeIdx + "</think>".length);
-        this.fullResponse = (before + after).trimStart();
+        this.fullResponse = this.joinAroundRemovedBlock(before, after);
         this.excludedThinkBlockStart = -1;
       } else {
         // Incomplete -- truncate
@@ -116,7 +141,9 @@ export class ThinkBlockStreamer {
     // Handle malformed: only </think> without <think> (e.g., some chat templates)
     const closeIdx = this.fullResponse.indexOf("</think>");
     if (closeIdx !== -1) {
-      this.fullResponse = this.fullResponse.substring(closeIdx + "</think>".length).trimStart();
+      const before = "";
+      const after = this.fullResponse.substring(closeIdx + "</think>".length);
+      this.fullResponse = this.joinAroundRemovedBlock(before, after);
     }
   }
 
@@ -157,29 +184,47 @@ export class ThinkBlockStreamer {
     return hasThinkingContent;
   }
 
-  private handleDeepseekChunk(chunk: any) {
-    // Handle standard string content
-    if (typeof chunk.content === "string") {
+  /**
+   * Handle DeepSeek-style chunks carrying `reasoning_content` alongside content.
+   *
+   * Ordering matters: a single chunk can deliver reasoning and answer text
+   * together, and reasoning always precedes the answer it produced. Reasoning is
+   * therefore written (and the think block opened) before any content text, so
+   * the two streams cannot interleave.
+   *
+   * @param chunk Streamed chunk in DeepSeek/OpenAI-compatible format.
+   * @returns True when the chunk carried reasoning content.
+   */
+  private handleDeepseekChunk(chunk: any): boolean {
+    const reasoningContent = chunk.additional_kwargs?.reasoning_content;
+    let handledThinking = false;
+
+    // Reasoning first: it is produced before the answer text in the same chunk.
+    if (reasoningContent !== undefined && reasoningContent !== null) {
+      handledThinking = true;
+      // Skip thinking content if excludeThinking is enabled
+      if (!this.excludeThinking) {
+        if (!this.hasOpenThinkBlock) {
+          this.fullResponse += "\n<think>";
+          this.hasOpenThinkBlock = true;
+        }
+        this.fullResponse += reasoningContent;
+      }
+    }
+
+    // Handle standard string content. Empty strings are common on
+    // reasoning-only chunks and must not close an in-progress think block.
+    if (typeof chunk.content === "string" && chunk.content) {
+      // Close the think block before any answer text is appended, so the answer
+      // never lands inside the reasoning block.
+      if (this.hasOpenThinkBlock) {
+        this.fullResponse += "</think>";
+        this.hasOpenThinkBlock = false;
+      }
       this.fullResponse += stripSpecialTokens(chunk.content);
     }
 
-    // Handle deepseek reasoning/thinking content
-    if (chunk.additional_kwargs?.reasoning_content) {
-      // Skip thinking content if excludeThinking is enabled
-      if (this.excludeThinking) {
-        return true; // Indicate we handled (but skipped) a thinking chunk
-      }
-      if (!this.hasOpenThinkBlock) {
-        this.fullResponse += "\n<think>";
-        this.hasOpenThinkBlock = true;
-      }
-      // Guard against undefined reasoning content
-      if (chunk.additional_kwargs.reasoning_content !== undefined) {
-        this.fullResponse += chunk.additional_kwargs.reasoning_content;
-      }
-      return true; // Indicate we handled a thinking chunk
-    }
-    return false; // No thinking chunk handled
+    return handledThinking;
   }
 
   /**
@@ -199,20 +244,23 @@ export class ThinkBlockStreamer {
    * Trade-offs:
    * - Models that only populate reasoning_details (without delta.reasoning) won't show thinking
    * - This is acceptable for now as most models use delta.reasoning for streaming
+   *
+   * @param chunk Streamed chunk in OpenRouter format.
    */
-  private handleOpenRouterChunk(chunk: any) {
-    // Only process delta.reasoning (streaming), ignore reasoning_details entirely
+  private handleOpenRouterChunk(chunk: any): void {
+    // Only process delta.reasoning (streaming), ignore reasoning_details entirely.
+    // Reasoning is written first because it is produced before the answer, even
+    // when both arrive in the same chunk.
     if (chunk.additional_kwargs?.delta?.reasoning) {
-      // Skip thinking content if excludeThinking is enabled
-      if (this.excludeThinking) {
-        return true;
+      // Skip thinking content if excludeThinking is enabled, but still fall
+      // through so any answer text in this chunk is not lost.
+      if (!this.excludeThinking) {
+        if (!this.hasOpenThinkBlock) {
+          this.fullResponse += "\n<think>";
+          this.hasOpenThinkBlock = true;
+        }
+        this.fullResponse += chunk.additional_kwargs.delta.reasoning;
       }
-      if (!this.hasOpenThinkBlock) {
-        this.fullResponse += "\n<think>";
-        this.hasOpenThinkBlock = true;
-      }
-      this.fullResponse += chunk.additional_kwargs.delta.reasoning;
-      return true; // Handled thinking
     }
 
     // Close think block before adding regular content
@@ -221,12 +269,12 @@ export class ThinkBlockStreamer {
       this.hasOpenThinkBlock = false;
     }
 
-    // Handle standard string content (this is the actual response, not thinking)
+    // Handle standard string content (this is the actual response, not thinking).
+    // stripSpecialTokens is applied for parity with the DeepSeek branch -- local
+    // OpenAI-compatible servers leak chat-template tokens through either path.
     if (typeof chunk.content === "string" && chunk.content) {
-      this.fullResponse += chunk.content;
+      this.fullResponse += stripSpecialTokens(chunk.content);
     }
-
-    return false; // No thinking handled
   }
 
   /**
@@ -349,15 +397,24 @@ export class ThinkBlockStreamer {
   }
 
   close(): StreamingResult {
-    // Make sure to close any open think block at the end
+    // Close any think block left open by a stream that ended mid-reasoning, and
+    // clear the flag so later state checks do not see a stale open block.
     if (this.hasOpenThinkBlock) {
       this.fullResponse += "</think>";
+      this.hasOpenThinkBlock = false;
     }
 
     // Final check for text-level think tags (in case stream ended before </think> was seen)
     this.handleTextLevelThinkTags();
 
+    // Error text is answer content, never reasoning. It is appended after all
+    // think-block handling so it cannot be captured inside a reasoning block.
     if (this.errorResponse) {
+      // close() may have re-opened a text-level think block; close it before the error.
+      if (this.hasOpenThinkBlock) {
+        this.fullResponse += "</think>";
+        this.hasOpenThinkBlock = false;
+      }
       this.fullResponse += this.errorResponse;
     }
 

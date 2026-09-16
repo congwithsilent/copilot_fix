@@ -276,7 +276,7 @@ export function QuickAskPanel({
   return (
     <div
       ref={containerRef}
-      className={`tw-group tw-relative tw-flex tw-size-full tw-flex-col tw-rounded-lg tw-rounded-b-none tw-border tw-border-solid tw-border-border tw-bg-primary tw-shadow-lg${
+      className={`tw-group tw-relative tw-flex tw-size-full tw-flex-col tw-rounded-lg tw-rounded-b-none tw-bg-primary tw-shadow-lg${
         hasMessages && !hasCustomHeight ? " tw-max-h-[min(500px,70vh)]" : ""
       }`}
       onKeyDown={handleKeyDown}
@@ -348,7 +348,7 @@ export function QuickAskPanel({
       </div>
 
       {/* Toolbar - always at bottom */}
-      <div className="tw-mt-auto tw-flex tw-items-center tw-justify-between tw-gap-2 tw-border-t tw-border-solid tw-border-border tw-px-3 tw-py-1.5">
+      <div className="tw-mt-auto tw-flex tw-items-center tw-justify-between tw-gap-2 tw-px-3 tw-py-1.5">
         <div className="tw-flex tw-items-center tw-gap-1">
           {/* TODO: Uncomment when Edit/Edit-Direct modes are implemented
           <ModeSelector
