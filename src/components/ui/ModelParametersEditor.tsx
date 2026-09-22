@@ -2,6 +2,8 @@ import React from "react";
 import { CustomModel } from "@/aiParams";
 import { FormField } from "@/components/ui/form-field";
 import { ParameterControl } from "@/components/ui/parameter-controls";
+import { SettingSwitch } from "@/components/ui/setting-switch";
+import { Label } from "@/components/ui/label";
 import {
   ChatModelProviders,
   DEFAULT_MODEL_SETTING,
@@ -78,7 +80,8 @@ export function ModelParametersEditor({
     model.provider === "lm_studio" ||
     model.provider === ChatModelProviders.LM_STUDIO ||
     hasReasoningCapability;
-  const showVerbosity = model.name.startsWith("gpt-5") && model.provider === ChatModelProviders.OPENAI;
+  const showVerbosity =
+    model.name.startsWith("gpt-5") && model.provider === ChatModelProviders.OPENAI;
 
   return (
     <div className="tw-space-y-4">
@@ -131,8 +134,8 @@ export function ModelParametersEditor({
                   model can use as context. Default is {DEFAULT_OLLAMA_NUM_CTX}.
                 </p>
                 <em>
-                  Lower this value to reduce VRAM usage on GPUs with limited memory. Ollama will
-                  cap this at the model&apos;s actual maximum.
+                  Lower this value to reduce VRAM usage on GPUs with limited memory. Ollama will cap
+                  this at the model&apos;s actual maximum.
                 </em>
               </>
             }
@@ -272,6 +275,31 @@ export function ModelParametersEditor({
               </>
             }
           />
+        </FormField>
+      )}
+
+      {/* Disable Thinking - For OpenAI format / compatible endpoints */}
+      {(model.provider === ChatModelProviders.OPENAI_FORMAT ||
+        model.provider === ChatModelProviders.SILICONFLOW ||
+        model.provider === ChatModelProviders.OPENAI) && (
+        <FormField>
+          <div className="tw-space-y-1.5">
+            <div className="tw-flex tw-items-center tw-justify-between">
+              <Label htmlFor="disable-thinking" className="tw-text-sm tw-font-medium">
+                Disable Thinking
+              </Label>
+              <SettingSwitch
+                id="disable-thinking"
+                checked={model.disableThinking ?? false}
+                onCheckedChange={(checked) => onChange("disableThinking", checked)}
+              />
+            </div>
+            <div className="tw-pr-12 tw-text-xs tw-leading-relaxed tw-text-muted">
+              Explicitly disable deep thinking / reasoning in the request payload (sends{" "}
+              <code>thinking: &#123; type: &quot;disabled&quot; &#125;</code>) for compatible models
+              (e.g. Ark / 火山方舟, Kimi, etc.).
+            </div>
+          </div>
         </FormField>
       )}
     </div>

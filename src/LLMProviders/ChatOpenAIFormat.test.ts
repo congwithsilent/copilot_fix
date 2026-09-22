@@ -150,5 +150,73 @@ describe("ChatOpenAIFormat", () => {
       // into AbortSignal's internal graph.
       expect((configured as any).defaultOptions.signal).toBe(controller.signal);
     });
+
+    it("preserves thinking configuration on withConfig", () => {
+      const model = new ChatOpenAIFormat({
+        modelName: "test-model",
+        apiKey: "test-key",
+        disableThinking: true,
+      });
+      const configured = model.withConfig({ signal: undefined });
+      expect((configured as any).thinking).toEqual({ type: "disabled" });
+      expect((configured as any).completions.thinking).toEqual({ type: "disabled" });
+    });
+  });
+
+  describe("completionWithRetry payload normalization", () => {
+    it("injects thinking: { type: 'disabled' } when disableThinking is set", async () => {
+      const model = new ChatOpenAIFormat({
+        modelName: "test-model",
+        apiKey: "test-key",
+        disableThinking: true,
+      });
+      const completions = (model as any).completions;
+      const mockCreate = jest.fn().mockResolvedValue({});
+      completions.client = { chat: { completions: { create: mockCreate } } };
+      completions.caller = { call: async (fn: any) => fn() };
+
+      const request: any = {
+        model: "test-model",
+        messages: [{ role: "user", content: "hello" }],
+      };
+      await completions.completionWithRetry(request);
+
+      expect(request.thinking).toEqual({ type: "disabled" });
+      expect(mockCreate).toHaveBeenCalledWith(
+        expect.objectContaining({ thinking: { type: "disabled" } }),
+        expect.anything()
+      );
+    });
+
+    it("orders file content parts before text parts in user messages", async () => {
+      const model = new ChatOpenAIFormat({
+        modelName: "test-model",
+        apiKey: "test-key",
+      });
+      const completions = (model as any).completions;
+      const mockCreate = jest.fn().mockResolvedValue({});
+      completions.client = { chat: { completions: { create: mockCreate } } };
+      completions.caller = { call: async (fn: any) => fn() };
+
+      const request: any = {
+        model: "test-model",
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "Please analyze" },
+              {
+                type: "file",
+                file: { file_data: "data:application/pdf;base64,123", filename: "doc.pdf" },
+              },
+            ],
+          },
+        ],
+      };
+      await completions.completionWithRetry(request);
+
+      expect(request.messages[0].content[0].type).toBe("file");
+      expect(request.messages[0].content[1].type).toBe("text");
+    });
   });
 });

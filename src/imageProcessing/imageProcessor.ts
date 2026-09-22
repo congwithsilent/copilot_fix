@@ -17,12 +17,21 @@ export interface TextContent {
   [key: string]: unknown; // Index signature for LangChain compatibility
 }
 
+export interface FileContent {
+  type: "file";
+  file: {
+    file_data: string;
+    filename: string;
+  };
+  [key: string]: unknown; // Index signature for LangChain compatibility
+}
+
 export interface ImageProcessingResult {
   successfulImages: ImageContent[];
   failureDescriptions: string[];
 }
 
-export type MessageContent = ImageContent | TextContent;
+export type MessageContent = ImageContent | TextContent | FileContent;
 
 export class ImageProcessor {
   private static readonly IMAGE_EXTENSIONS = [".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp"];

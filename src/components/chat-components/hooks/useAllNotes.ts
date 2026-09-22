@@ -22,17 +22,10 @@ export function useAllNotes(isCopilotPlus: boolean = false): TFile[] {
   const allNotes = useAtomValue(notesAtom, { store: settingsStore });
 
   return useMemo(() => {
-    let files: TFile[];
-
-    if (isCopilotPlus) {
-      // Return all files (md + PDFs + canvas) - create a copy to avoid mutating the atom
-      files = [...allNotes];
-    } else {
-      // Filter out PDFs for non-Plus users, but include canvas for all users
-      files = allNotes.filter((file) => file.extension === "md" || file.extension === "canvas");
-    }
+    // Return all files (md + PDFs + canvas) - create a copy to avoid mutating the atom
+    const files = [...allNotes];
 
     // Sort by creation time in descending order (newest first)
     return files.sort((a, b) => b.stat.ctime - a.stat.ctime);
-  }, [allNotes, isCopilotPlus]);
+  }, [allNotes]);
 }

@@ -576,8 +576,13 @@ export class ContextProcessor {
         }
 
         // 2. Apply chain restrictions only to supported files that are NOT text-readable
+        // PDF files are handled locally as multimodal binary context; do not restrict or inject as pure text
+        if (note.extension.toLowerCase() === "pdf") {
+          return;
+        }
+
         if (!isPlusChain(currentChain) && !isTextReadableFile(note)) {
-          // This file type is supported, but requires Plus mode (e.g., PDF)
+          // This file type is supported, but requires Plus mode (e.g., EPUB, DOCX)
           logWarn(`File type ${note.extension} requires Copilot Plus mode for context processing.`);
           // Show user-facing notice about the restriction
           new Notice(RESTRICTION_MESSAGES.NON_MARKDOWN_FILES_RESTRICTED);

@@ -1,4 +1,3 @@
-import { AIMessageChunk } from "@langchain/core/messages";
 import type { BaseMessageChunk } from "@langchain/core/messages";
 import { ChatOpenAI, ChatOpenAICompletions } from "@langchain/openai";
 import {
@@ -76,17 +75,53 @@ class ChatOpenAIFormatCompletions extends ChatOpenAICompletions {
       const additionalKwargs = (chunk.additional_kwargs ?? {}) as Record<string, unknown>;
       applyReasoningToAdditionalKwargs(additionalKwargs, { ...reasoning, reasoningContent });
 
-      if (chunk instanceof AIMessageChunk) {
-        chunk.additional_kwargs = additionalKwargs;
-      }
+      chunk.additional_kwargs = additionalKwargs;
     }
 
     return chunk;
   }
+
+  public thinking?: { type: string; [key: string]: any };
+
+  constructor(fields?: any) {
+    super(fields);
+    if (fields?.thinking) {
+      this.thinking = fields.thinking;
+    } else if (fields?.disableThinking) {
+      this.thinking = { type: "disabled" };
+    }
+  }
+
+  /**
+   * Intercept requests sent to the OpenAI client to normalize payloads for
+   * OpenAI-compatible providers (such as Volcano Ark / 火山方舟):
+   * 1. Inject top-level `thinking` parameter if configured (e.g. `{ type: "disabled" }`).
+   * 2. Ensure multimodal user messages have file parts before text parts.
+   */
+  override async completionWithRetry(request: any, requestOptions?: any): Promise<any> {
+    if (this.thinking && request && request.thinking === undefined) {
+      request.thinking = this.thinking;
+    }
+
+    if (Array.isArray(request?.messages)) {
+      for (const msg of request.messages) {
+        if (Array.isArray(msg?.content)) {
+          const files = msg.content.filter((c: any) => c?.type === "file");
+          const nonFiles = msg.content.filter((c: any) => c?.type !== "file");
+          msg.content = [...files, ...nonFiles];
+        }
+      }
+    }
+
+    return super.completionWithRetry(request, requestOptions);
+  }
 }
 
-/** Constructor fields for {@link ChatOpenAIFormat}. Mirrors `ChatOpenAI` fields. */
-export type ChatOpenAIFormatFields = ConstructorParameters<typeof ChatOpenAI>[0];
+/** Constructor fields for {@link ChatOpenAIFormat}. Mirrors `ChatOpenAI` fields with thinking additions. */
+export type ChatOpenAIFormatFields = ConstructorParameters<typeof ChatOpenAI>[0] & {
+  thinking?: { type: string; [key: string]: any };
+  disableThinking?: boolean;
+};
 
 /**
  * Chat model for OpenAI-Format / OpenAI-compatible endpoints.
@@ -99,13 +134,24 @@ export type ChatOpenAIFormatFields = ConstructorParameters<typeof ChatOpenAI>[0]
  * constructor field instead.
  */
 export class ChatOpenAIFormat extends ChatOpenAI {
+  public thinking?: { type: string; [key: string]: any };
+
   constructor(fields?: ChatOpenAIFormatFields) {
     super(fields);
+
+    if (fields?.thinking) {
+      this.thinking = fields.thinking;
+    } else if (fields?.disableThinking) {
+      this.thinking = { type: "disabled" };
+    }
 
     // ChatOpenAI uses this instance for every non-Responses-API request.
     // Assigned after super() rather than passed in `fields` so the injected
     // instance is not also forwarded to the Responses API instance.
-    this.completions = new ChatOpenAIFormatCompletions(fields as any);
+    this.completions = new ChatOpenAIFormatCompletions({
+      ...fields,
+      thinking: this.thinking,
+    } as any);
 
     logInfo("[ChatOpenAIFormat] Initialized with streaming delta normalization");
   }
@@ -119,7 +165,10 @@ export class ChatOpenAIFormat extends ChatOpenAI {
    * constructor keeps the adapter attached.
    */
   override withConfig(config: any): this {
-    const newModel = new ChatOpenAIFormat(this.fields as ChatOpenAIFormatFields);
+    const newModel = new ChatOpenAIFormat({
+      ...(this.fields as ChatOpenAIFormatFields),
+      thinking: this.thinking,
+    });
     newModel.defaultOptions = {
       ...this.defaultOptions,
       ...config,

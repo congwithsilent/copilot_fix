@@ -428,7 +428,12 @@ export function isAllowedFileForChainContext(file: TFile | null, chainType: Chai
     return true;
   }
 
-  // Plus chains support all other file types (PDF, EPUB, PPT, DOCX, etc.)
+  // All chains support PDF files (handled as multimodal binary context)
+  if (file.extension.toLowerCase() === "pdf") {
+    return true;
+  }
+
+  // Plus chains support all other file types (EPUB, PPT, DOCX, etc.)
   return isPlusChain(chainType);
 }
 
@@ -817,6 +822,152 @@ export async function safeFetch(
   delete (headers as Record<string, string>)["content-length"];
 
   logInfo("safeFetch request");
+
+  if (typeof require !== "undefined") {
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const https = require("https");
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const http = require("http");
+      const urlStr = typeof url === "string" ? url : (url as any).toString();
+      const urlObj = new URL(urlStr);
+      const isHttps = urlObj.protocol === "https:";
+      const mod = isHttps ? https : http;
+
+      return await new Promise<Response>((resolve, reject) => {
+        const req = mod.request(
+          urlObj,
+          {
+            method: options.method?.toUpperCase() || "POST",
+            headers: headers,
+          },
+          (res: any) => {
+            const status = res.statusCode || 200;
+
+            if ([301, 302, 303, 307, 308].includes(status) && res.headers.location) {
+              const nextUrl = new URL(res.headers.location, urlObj).toString();
+              return resolve(safeFetch(nextUrl, options));
+            }
+
+            const resHeaders = new Headers();
+            for (const [k, v] of Object.entries(res.headers)) {
+              if (Array.isArray(v)) {
+                v.forEach((val) => resHeaders.append(k, val));
+              } else if (v !== undefined) {
+                resHeaders.set(k, v as string);
+              }
+            }
+
+            if (throwOnHttpError && status >= 400) {
+              const chunks: any[] = [];
+              res.on("data", (c: any) => chunks.push(c));
+              res.on("end", () => {
+                const text = Buffer.concat(chunks).toString("utf8");
+                let errorJson: any = null;
+                try {
+                  errorJson = JSON.parse(text);
+                } catch {
+                  // ignore JSON parse error
+                }
+
+                const error = new Error(ERROR_MESSAGES.REQUEST_FAILED(status)) as APIError;
+                error.json = errorJson;
+
+                if (
+                  errorJson?.detail?.reason === "Invalid license key" ||
+                  errorJson?.reason === "Invalid license key"
+                ) {
+                  error.message = "Invalid license key";
+                } else if (errorJson?.detail?.message || errorJson?.message) {
+                  const msg = errorJson?.detail?.message || errorJson?.message;
+                  const reason = errorJson?.detail?.reason || errorJson?.reason;
+                  error.message = reason ? `${msg}: ${reason}` : msg;
+                } else if (errorJson?.detail) {
+                  error.message = JSON.stringify(errorJson.detail);
+                } else if (errorJson) {
+                  error.message += ". " + JSON.stringify(errorJson);
+                }
+                reject(error);
+              });
+              return;
+            }
+
+            const bodyStream = new ReadableStream({
+              start(ctrl) {
+                res.on("data", (c: Buffer) => ctrl.enqueue(new Uint8Array(c)));
+                res.on("end", () => ctrl.close());
+                res.on("error", (err: Error) => ctrl.error(err));
+              },
+              cancel() {
+                req.destroy();
+              },
+            });
+
+            const readBodyText = async () => {
+              const reader = bodyStream.getReader();
+              const ch: Uint8Array[] = [];
+              let isReading = true;
+              while (isReading) {
+                const { done, value } = await reader.read();
+                if (done) {
+                  isReading = false;
+                  break;
+                }
+                if (value) ch.push(value);
+              }
+              const len = ch.reduce((a, b) => a + b.length, 0);
+              const b = new Uint8Array(len);
+              let off = 0;
+              for (const item of ch) {
+                b.set(item, off);
+                off += item.length;
+              }
+              return new TextDecoder().decode(b);
+            };
+
+            resolve({
+              ok: status >= 200 && status < 300,
+              status: status,
+              statusText: res.statusMessage || String(status),
+              headers: resHeaders,
+              url: urlStr,
+              type: "basic" as ResponseType,
+              redirected: false,
+              bytes: () => Promise.resolve(new Uint8Array(0)),
+              body: bodyStream as any,
+              bodyUsed: false,
+              json: async () => JSON.parse(await readBodyText()),
+              text: async () => await readBodyText(),
+              arrayBuffer: async () => {
+                const text = await readBodyText();
+                return new TextEncoder().encode(text).buffer;
+              },
+              blob: () => {
+                throw new Error("not implemented");
+              },
+              formData: () => {
+                throw new Error("not implemented");
+              },
+              clone: () => {
+                throw new Error("not implemented");
+              },
+            } as Response);
+          }
+        );
+
+        if (options.signal) {
+          options.signal.addEventListener("abort", () => req.destroy());
+        }
+        req.on("error", reject);
+        if (options.body) {
+          req.write(typeof options.body === "string" ? options.body : JSON.stringify(options.body));
+        }
+        req.end();
+      });
+    } catch (nodeErr) {
+      logInfo("safeFetch Node streaming fallback:", nodeErr);
+    }
+  }
 
   const method = options.method?.toUpperCase() || "POST";
   const methodsWithBody = ["POST", "PUT", "PATCH"];

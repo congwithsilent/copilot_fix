@@ -324,7 +324,13 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
     contextFolders?: string[];
     webTabs?: WebTabContext[];
   } = {}) => {
-    if (!inputMessage && selectedImages.length === 0) return;
+    const hasPdfInContext =
+      (effectiveIncludeActiveNote &&
+        app.workspace.getActiveFile()?.extension?.toLowerCase() === "pdf") ||
+      (contextNotes && contextNotes.some((n) => n.extension?.toLowerCase() === "pdf")) ||
+      (passedContextNotes && passedContextNotes.some((n) => n.extension?.toLowerCase() === "pdf"));
+
+    if (!inputMessage && selectedImages.length === 0 && !hasPdfInContext) return;
 
     // Check for URL restrictions in non-Plus chains and show notice, but continue processing
     const hasUrlsInContext = urls && urls.length > 0;
@@ -335,16 +341,8 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
     }
 
     try {
-      // Create message content array
+      // Create message content array for multimodal content
       const content: any[] = [];
-
-      // Add text content if present
-      if (inputMessage) {
-        content.push({
-          type: "text",
-          text: inputMessage,
-        });
-      }
 
       // Add images if present
       for (const image of selectedImages) {
@@ -355,6 +353,14 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
           image_url: {
             url: `data:${image.type};base64,${base64Image}`,
           },
+        });
+      }
+
+      // If images are present, also include text in content array
+      if (content.length > 0 && inputMessage) {
+        content.push({
+          type: "text",
+          text: inputMessage,
         });
       }
 

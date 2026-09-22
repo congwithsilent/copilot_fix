@@ -516,6 +516,13 @@ export default class ChatModelManager {
       }
     }
 
+    // Add thinking configuration (e.g. Ark / OpenAI compatible endpoints)
+    if (customModel?.disableThinking) {
+      config.thinking = { type: "disabled" };
+    } else if (customModel?.thinking) {
+      config.thinking = customModel.thinking;
+    }
+
     return config;
   }
 
@@ -677,6 +684,13 @@ export default class ChatModelManager {
   }
 
   getProviderConstructor(model: CustomModel): ChatConstructorType {
+    if (
+      model.provider === ChatModelProviders.OPENAI &&
+      (model.baseUrl || model.disableThinking || model.thinking)
+    ) {
+      return ChatOpenAIFormat;
+    }
+
     const constructor: ChatConstructorType =
       CHAT_PROVIDER_CONSTRUCTORS[model.provider as ChatModelProviders];
     if (!constructor) {

@@ -182,6 +182,10 @@ export interface CustomModel {
   // OpenAI GPT-5 and O-series specific fields
   reasoningEffort?: ReasoningEffort;
   verbosity?: Verbosity;
+
+  // Thinking configuration (e.g. Ark / OpenAI compatible endpoints)
+  disableThinking?: boolean;
+  thinking?: { type: string; [key: string]: any };
 }
 
 export function setModelKey(modelKey: string) {

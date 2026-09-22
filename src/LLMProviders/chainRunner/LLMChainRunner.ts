@@ -47,15 +47,27 @@ export class LLMChainRunner extends BaseChainRunner {
     // Add user message (L2+L3+L5 merged)
     const userMessageContent = baseMessages.find((m) => m.role === "user");
     if (userMessageContent) {
-      // Handle multimodal content if present
-      if (userMessage.content && Array.isArray(userMessage.content)) {
-        // Merge envelope text with multimodal content (images)
-        const updatedContent = userMessage.content.map((item: any) => {
+      // Handle multimodal content if present (images or files)
+      const hasMultimodal =
+        userMessage.content &&
+        Array.isArray(userMessage.content) &&
+        userMessage.content.some((item: any) => item.type === "image_url" || item.type === "file");
+
+      if (hasMultimodal) {
+        let textFound = false;
+        const updatedContent = userMessage.content!.map((item: any) => {
           if (item.type === "text") {
+            textFound = true;
             return { ...item, text: userMessageContent.content };
           }
           return item;
         });
+        if (!textFound) {
+          updatedContent.push({
+            type: "text",
+            text: userMessageContent.content,
+          });
+        }
         messages.push({
           role: "user",
           content: updatedContent,

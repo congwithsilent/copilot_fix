@@ -19,6 +19,7 @@ import { MessageRepository } from "./MessageRepository";
 import { ChatPersistenceManager } from "./ChatPersistenceManager";
 import { ACTIVE_WEB_TAB_MARKER, USER_SENDER } from "@/constants";
 import { TFile, Vault } from "obsidian";
+import { arrayBufferToBase64 } from "@/utils/base64";
 import { getWebViewerService } from "@/services/webViewerService/webViewerServiceSingleton";
 import {
   normalizeUrlForMatching,
@@ -445,6 +446,41 @@ export class ChatManager {
         updatedContext.webTabs || [],
         shouldIncludeActiveWebTab
       );
+
+      // Process PDF files in context as multimodal attachments
+      const pdfNotes = (updatedContext.notes || []).filter(
+        (note): note is TFile => note instanceof TFile && note.extension?.toLowerCase() === "pdf"
+      );
+
+      if (pdfNotes.length > 0) {
+        const messageContent: any[] = content ? [...content] : [];
+
+        for (const pdfFile of pdfNotes) {
+          const alreadyExists = messageContent.some(
+            (item: any) => item.type === "file" && item.file?.filename === pdfFile.name
+          );
+          if (!alreadyExists) {
+            updateLoadingMessage?.("Reading PDF document...");
+            const binaryBuffer = await this.plugin.app.vault.readBinary(pdfFile);
+            const base64 = arrayBufferToBase64(binaryBuffer);
+            messageContent.unshift({
+              type: "file",
+              file: {
+                file_data: `data:application/pdf;base64,${base64}`,
+                filename: pdfFile.name,
+              },
+            });
+          }
+        }
+
+        if (displayText && !messageContent.some((item: any) => item.type === "text")) {
+          messageContent.push({
+            type: "text",
+            text: displayText,
+          });
+        }
+        content = messageContent;
+      }
 
       // Create the message with initial content
       const currentRepo = this.getCurrentMessageRepo();
