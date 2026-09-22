@@ -119,6 +119,60 @@ const ChatInput: React.FC<ChatInputProps> = ({
   const [contextWebTabs, setContextWebTabs] = useState<WebTabContext[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
   const lexicalEditorRef = useRef<any>(null);
+
+  // Object URLs for image previews, keyed by the File object.
+  // Created once per file and revoked on removal/unmount — calling
+  // URL.createObjectURL during render would leak a blob URL on every re-render.
+  const imageUrlRegistryRef = useRef<Map<File, string>>(new Map());
+  const getImageUrl = useCallback((file: File): string => {
+    let url = imageUrlRegistryRef.current.get(file);
+    if (!url) {
+      url = URL.createObjectURL(file);
+      imageUrlRegistryRef.current.set(file, url);
+    }
+    return url;
+  }, []);
+  const releaseImageUrl = useCallback((file: File): void => {
+    const url = imageUrlRegistryRef.current.get(file);
+    if (url) {
+      URL.revokeObjectURL(url);
+      imageUrlRegistryRef.current.delete(file);
+    }
+  }, []);
+  // Revoke any URLs whose files are no longer selected (e.g. cleared after send)
+  useEffect(() => {
+    const selectedSet = new Set(selectedImages);
+    for (const [file, url] of imageUrlRegistryRef.current) {
+      if (!selectedSet.has(file)) {
+        URL.revokeObjectURL(url);
+        imageUrlRegistryRef.current.delete(file);
+      }
+    }
+  }, [selectedImages]);
+  // Revoke everything on unmount
+  useEffect(() => {
+    const registry = imageUrlRegistryRef.current;
+    return () => {
+      for (const url of registry.values()) {
+        URL.revokeObjectURL(url);
+      }
+      registry.clear();
+    };
+  }, []);
+
+  const removeSelectedImage = useCallback(
+    (index: number) => {
+      setSelectedImages((prev) => {
+        const removed = prev[index];
+        if (removed) {
+          releaseImageUrl(removed);
+        }
+        return prev.filter((_, i) => i !== index);
+      });
+    },
+    [releaseImageUrl, setSelectedImages]
+  );
+
   const [currentModelKey, setCurrentModelKey] = useModelKey();
   const [currentChain] = useChainType();
   const [isProjectLoading] = useProjectLoading();
@@ -782,15 +836,11 @@ const ChatInput: React.FC<ChatInputProps> = ({
       {selectedImages.length > 0 && (
         <div className="selected-images">
           {selectedImages.map((file, index) => (
-            <div key={index} className="image-preview-container">
-              <img
-                src={URL.createObjectURL(file)}
-                alt={file.name}
-                className="selected-image-preview"
-              />
+            <div key={`${file.name}-${index}`} className="image-preview-container">
+              <img src={getImageUrl(file)} alt={file.name} className="selected-image-preview" />
               <button
                 className="remove-image-button"
-                onClick={() => setSelectedImages((prev) => prev.filter((_, i) => i !== index))}
+                onClick={() => removeSelectedImage(index)}
                 title="Remove image"
               >
                 <X className="tw-size-4" />

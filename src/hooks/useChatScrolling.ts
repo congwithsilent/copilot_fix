@@ -1,23 +1,35 @@
 import { USER_SENDER } from "@/constants";
 import { ChatMessage } from "@/types/message";
-import { useCallback, useRef, useState, useEffect } from "react";
+import { useCallback, useRef, useState, useEffect, type UIEventHandler } from "react";
+
+/** Distance from the bottom (px) within which the view counts as pinned. */
+const PIN_TO_BOTTOM_THRESHOLD_PX = 96;
 
 interface UseChatScrollingOptions {
   chatHistory: ChatMessage[];
+  /** Streaming AI content; while the user is pinned to the bottom, changes follow-scroll. */
+  streamContent?: string;
 }
 
 interface UseChatScrollingReturn {
   containerMinHeight: number;
   scrollContainerCallbackRef: (node: HTMLDivElement | null) => void;
   getMessageKey: (message: ChatMessage, index: number) => string;
+  /** Whether the container has scrolled away from the bottom (show the jump button). */
+  showScrollToBottom: boolean;
+  scrollToBottom: (behavior?: "smooth" | "instant") => void;
+  handleScroll: UIEventHandler<HTMLDivElement>;
 }
 
 export const useChatScrolling = ({
   chatHistory,
+  streamContent,
 }: UseChatScrollingOptions): UseChatScrollingReturn => {
   const [containerMinHeight, setContainerMinHeight] = useState(0);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
+  const isPinnedToBottomRef = useRef(true);
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
 
   // Generate consistent message key for DOM identification
   // Using message IDs is better, as in the case of a network disconnection, the timestamps of two messages could be identical.
@@ -132,6 +144,34 @@ export const useChatScrolling = ({
     }
   }, []);
 
+  /**
+   * Track whether the user is pinned to the bottom on every scroll event.
+   * The ref drives follow-scroll decisions without re-renders; the state only
+   * toggles the jump-to-bottom button.
+   */
+  const handleScroll = useCallback(() => {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    const pinned = distanceFromBottom <= PIN_TO_BOTTOM_THRESHOLD_PX;
+    isPinnedToBottomRef.current = pinned;
+    setShowScrollToBottom(!pinned);
+  }, []);
+
+  /**
+   * Follow streaming content while the user is pinned to the bottom.
+   *
+   * Instant behavior per frame; smooth scrolling cannot keep up with the token
+   * rate and visually lags behind the growing content. When the user scrolls up
+   * the ref flips false and content grows off-screen until they return.
+   */
+  useEffect(() => {
+    if (isPinnedToBottomRef.current) {
+      scrollToBottom("instant");
+    }
+  }, [streamContent, chatHistory, scrollToBottom]);
+
   // Scroll to bottom when component mounts (instant to avoid initial animation)
   useEffect(() => {
     scrollToBottom("instant");
@@ -151,5 +191,8 @@ export const useChatScrolling = ({
     containerMinHeight,
     scrollContainerCallbackRef,
     getMessageKey,
+    showScrollToBottom,
+    scrollToBottom,
+    handleScroll,
   };
 };
