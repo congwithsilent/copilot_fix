@@ -374,7 +374,8 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         content: string,
         tagName: string,
         summaryText: string,
-        streamingSummaryText: string
+        streamingSummaryText: string,
+        streamingCollapsed: boolean
       ): string => {
         const openTag = `<${tagName}>`;
         let sectionIndex = 0;
@@ -396,15 +397,34 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
             </details>\n\n`;
           });
 
-          // Then handle any unclosed tag, but preserve the streamed content
+          // Then handle any unclosed tag, preserving the streamed content. When
+          // streamingCollapsed is true (think sections), render as a <details>
+          // that is collapsed unless the user explicitly expanded it, so thinking
+          // stays hidden while streaming. The unstable boundary never splits a
+          // block tag (see streamingMarkdownBoundary BLOCK_TAGS), so the section
+          // re-renders as a unit and open state restores from the state map.
           const unClosedRegex = new RegExp(`<${tagName}>([\\s\\S]*)$`);
-          content = content.replace(
-            unClosedRegex,
-            (_match, partialContent) => `<div class="copilot-collapsible-streaming">
+          if (streamingCollapsed) {
+            content = content.replace(unClosedRegex, (_match, partialContent) => {
+              const sectionKey = `${tagName}-streaming`;
+              const domId = buildCopilotCollapsibleDomId(messageId.current, sectionKey);
+              // Default collapsed: open only when the user explicitly expanded it.
+              const openAttribute = collapsibleOpenStateMap.get(domId) ? " open" : "";
+
+              return `<details id="${domId}" class="copilot-collapsible"${openAttribute}>
+                <summary class="copilot-collapsible-summary">${streamingSummaryText}</summary>
+                <div class="copilot-collapsible-body">${partialContent.trim()}</div>
+              </details>\n\n`;
+            });
+          } else {
+            content = content.replace(
+              unClosedRegex,
+              (_match, partialContent) => `<div class="copilot-collapsible-streaming">
               <div class="copilot-collapsible-streaming-label">${streamingSummaryText}</div>
               <div class="copilot-collapsible-streaming-body">${partialContent.trim()}</div>
             </div>`
-          );
+            );
+          }
           return content;
         }
 
@@ -425,7 +445,14 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
       };
 
       const processThinkSection = (content: string): string => {
-        return processCollapsibleSection(content, "think", "Thought for a while", "Thinking...");
+        return processCollapsibleSection(
+          content,
+          "think",
+          "Thought for a while",
+          "Thinking...",
+          // Thinking stays collapsed by default, even while streaming.
+          true
+        );
       };
 
       const processWriteFileSection = (content: string): string => {
@@ -464,12 +491,14 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         processedContent = unwrapXmlCodeblocks(processedContent);
         processedContent = unwrapStreamingXmlCodeblocks(processedContent);
 
-        // Then process the writeFile sections normally
+        // Then process the writeFile sections normally (streaming body stays
+        // expanded so users can watch content being generated)
         return processCollapsibleSection(
           processedContent,
           "writeFile",
           "Generated new content",
-          "Generating changes..."
+          "Generating changes...",
+          false
         );
       };
 

@@ -2,7 +2,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { cn } from "@/lib/utils";
 import { ReasoningStatus } from "@/LLMProviders/chainRunner/utils/AgentReasoningState";
 import { ChevronRight } from "lucide-react";
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 
 /**
  * Props for the AgentReasoningBlock component
@@ -91,11 +91,10 @@ const CopilotSpinner: React.FC = () => {
  * reasoning display that shows:
  * - Active spinner during reasoning
  * - Elapsed time counter
- * - Current reasoning steps (last 2)
- * - Collapsible view after completion
+ * - Collapsible view of reasoning steps (collapsed by default)
  *
  * States:
- * - reasoning: Expanded, showing steps and active spinner
+ * - reasoning: Header with spinner and timer; steps collapsed by default
  * - collapsed: Collapsed after reasoning, before response
  * - complete: Response done, expandable to see steps
  */
@@ -105,28 +104,21 @@ export const AgentReasoningBlock: React.FC<AgentReasoningBlockProps> = ({
   steps,
   isStreaming,
 }) => {
-  const [isExpanded, setIsExpanded] = useState(status === "reasoning");
+  // Collapsed by default in every state, including while actively reasoning.
+  // The header still shows the spinner and elapsed time; steps are opt-in.
+  const [isExpanded, setIsExpanded] = useState(false);
 
-  // Auto-expand when reasoning, auto-collapse when done
-  useEffect(() => {
-    if (status === "reasoning") {
-      setIsExpanded(true);
-    } else if (status === "collapsed" || status === "complete") {
-      setIsExpanded(false);
-    }
-  }, [status]);
+  const isActive = status === "reasoning";
+  const canExpand = steps.length > 0;
 
   // Don't render anything if idle
   if (status === "idle") {
     return null;
   }
 
-  const isActive = status === "reasoning";
-  const canExpand = !isActive && steps.length > 0;
-
   return (
     <Collapsible
-      open={canExpand ? isExpanded : isActive}
+      open={canExpand ? isExpanded : false}
       onOpenChange={canExpand ? setIsExpanded : undefined}
       disabled={!canExpand}
       className="agent-reasoning-block"
@@ -159,7 +151,7 @@ export const AgentReasoningBlock: React.FC<AgentReasoningBlockProps> = ({
         </div>
       </CollapsibleTrigger>
 
-      {/* Steps - visible when expanded or actively reasoning */}
+      {/* Steps - visible only when the user explicitly expands */}
       <CollapsibleContent>
         {steps.length > 0 && (
           <ul className="agent-reasoning-steps">

@@ -176,4 +176,77 @@ describe("ChatSingleMessage", () => {
     expect(messageSegment?.querySelector(".content-hr")).not.toBeNull();
     expect(messageSegment?.querySelector('a[href="#fn-2"]')?.textContent).toBe("2");
   });
+
+  it("renders an unclosed think block as a collapsed details section while streaming", async () => {
+    const streamingMessage: ChatMessage = {
+      ...baseMessage,
+      id: "streaming-think-message",
+      message: "<think>Secret reasoning so far",
+    };
+
+    renderMarkdownMock.mockImplementation((_markdown: string, el: HTMLElement) => {
+      el.innerHTML = `
+        <details class="copilot-collapsible">
+          <summary class="copilot-collapsible-summary">Thinking...</summary>
+          <div class="copilot-collapsible-body">Secret reasoning so far</div>
+        </details>
+      `;
+    });
+
+    const { container } = render(
+      <TooltipProvider>
+        <ChatSingleMessage
+          message={streamingMessage}
+          app={createAppStub()}
+          isStreaming={true}
+          onDelete={() => {}}
+        />
+      </TooltipProvider>
+    );
+
+    await waitFor(() => expect(renderMarkdownMock).toHaveBeenCalled());
+
+    // The streamed think block must render through the collapsible <details>
+    // path (collapsed by default), not the legacy always-expanded streaming div.
+    const details = container.querySelector("details.copilot-collapsible");
+    expect(details).not.toBeNull();
+    expect(details?.getAttribute("open")).toBeNull();
+    expect(details?.querySelector(".copilot-collapsible-summary")?.textContent).toContain(
+      "Thinking..."
+    );
+    expect(container.querySelector(".copilot-collapsible-streaming")).toBeNull();
+  });
+
+  it("keeps unclosed writeFile sections expanded while streaming", async () => {
+    const streamingMessage: ChatMessage = {
+      ...baseMessage,
+      id: "streaming-writefile-message",
+      message: "<writeFile>Partial generated content",
+    };
+
+    renderMarkdownMock.mockImplementation((_markdown: string, el: HTMLElement) => {
+      el.innerHTML = `
+        <div class="copilot-collapsible-streaming">
+          <div class="copilot-collapsible-streaming-label">Generating changes...</div>
+          <div class="copilot-collapsible-streaming-body">Partial generated content</div>
+        </div>
+      `;
+    });
+
+    const { container } = render(
+      <TooltipProvider>
+        <ChatSingleMessage
+          message={streamingMessage}
+          app={createAppStub()}
+          isStreaming={true}
+          onDelete={() => {}}
+        />
+      </TooltipProvider>
+    );
+
+    await waitFor(() => expect(renderMarkdownMock).toHaveBeenCalled());
+
+    const streamingSection = container.querySelector(".copilot-collapsible-streaming");
+    expect(streamingSection).not.toBeNull();
+  });
 });
