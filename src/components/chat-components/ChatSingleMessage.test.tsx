@@ -1,5 +1,5 @@
 import React from "react";
-import { render, waitFor } from "@testing-library/react";
+import { act, render, waitFor } from "@testing-library/react";
 import ChatSingleMessage, {
   normalizeFootnoteRendering,
 } from "@/components/chat-components/ChatSingleMessage";
@@ -248,5 +248,103 @@ describe("ChatSingleMessage", () => {
 
     const streamingSection = container.querySelector(".copilot-collapsible-streaming");
     expect(streamingSection).not.toBeNull();
+  });
+
+  it("reveals only the blocks that are new since the previous commit", async () => {
+    jest.useFakeTimers();
+
+    try {
+      renderMarkdownMock.mockImplementation((markdown: string, el: HTMLElement) => {
+        const parts = markdown.split("\n\n").filter((part) => part.trim().length > 0);
+        const blocks = parts.length > 0 ? parts : [markdown];
+        el.innerHTML = blocks.map((part) => `<p>${part.trim()}</p>`).join("");
+      });
+
+      const streamingMessage: ChatMessage = {
+        ...baseMessage,
+        id: "streaming-reveal-message",
+        message: "one",
+      };
+
+      const { container, rerender } = render(
+        <TooltipProvider>
+          <ChatSingleMessage
+            message={streamingMessage}
+            app={createAppStub()}
+            isStreaming={true}
+            onDelete={() => {}}
+          />
+        </TooltipProvider>
+      );
+
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      // First commit: the only block is new and animates.
+      expect(
+        Array.from(container.querySelectorAll(".copilot-stream-reveal")).map((el) => el.textContent)
+      ).toEqual(["one"]);
+
+      rerender(
+        <TooltipProvider>
+          <ChatSingleMessage
+            message={{ ...streamingMessage, message: "one\n\ntwo" }}
+            app={createAppStub()}
+            isStreaming={true}
+            onDelete={() => {}}
+          />
+        </TooltipProvider>
+      );
+
+      // Nothing is committed until the render buffer flushes.
+      expect(container.textContent).not.toContain("two");
+
+      await act(async () => {
+        jest.advanceTimersByTime(150);
+        await Promise.resolve();
+      });
+
+      expect(container.textContent).toContain("two");
+
+      // The first block is still inside its reveal window and must be resumed
+      // mid-animation, not restarted; the second block starts fresh.
+      const animated = Array.from(
+        container.querySelectorAll<HTMLElement>(".copilot-stream-reveal")
+      );
+      expect(animated.map((el) => el.textContent)).toEqual(["one", "two"]);
+      expect(animated[0].style.animationDelay).toBe("-150ms");
+      expect(animated[1].style.animationDelay).toBe("");
+
+      // Growing the block that is already on screen must not re-animate it;
+      // only the appended characters fade in.
+      rerender(
+        <TooltipProvider>
+          <ChatSingleMessage
+            message={{ ...streamingMessage, message: "one\n\ntwo three" }}
+            app={createAppStub()}
+            isStreaming={true}
+            onDelete={() => {}}
+          />
+        </TooltipProvider>
+      );
+
+      await act(async () => {
+        jest.advanceTimersByTime(150);
+        await Promise.resolve();
+      });
+
+      expect(container.textContent).toContain("two three");
+      expect(
+        Array.from(container.querySelectorAll(".copilot-stream-reveal")).map((el) => el.textContent)
+      ).toEqual(["two three"]);
+      expect(
+        Array.from(container.querySelectorAll(".copilot-stream-reveal-inline")).map(
+          (el) => el.textContent
+        )
+      ).toEqual([" three"]);
+    } finally {
+      jest.useRealTimers();
+    }
   });
 });

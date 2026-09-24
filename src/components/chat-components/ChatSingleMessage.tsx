@@ -36,7 +36,7 @@ import { ChatMessage } from "@/types/message";
 import { cleanMessageForCopy, extractYoutubeVideoId, insertIntoEditor } from "@/utils";
 import { preprocessAIResponse } from "@/utils/markdownPreprocess";
 import { App, Component, MarkdownRenderer, MarkdownView, TFile } from "obsidian";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSettingsValue } from "@/settings/model";
 import {
   buildCopilotCollapsibleDomId,
@@ -46,6 +46,18 @@ import {
   isEventWithinDetailsSummary,
 } from "@/components/chat-components/collapsibleStateUtils";
 import { findStableMarkdownBoundary } from "@/components/chat-components/utils/streamingMarkdownBoundary";
+import {
+  collectRevealTargets,
+  EMPTY_APPENDED_TEXT_STATE,
+  revealAppendedText,
+  revealBlocks,
+  revealClassFor,
+  revealInlineClassFor,
+  STREAM_REVEAL_DURATION_MS,
+  STREAM_REVEAL_INLINE_DURATION_MS,
+  type AppendedTextState,
+} from "@/components/chat-components/utils/streamingReveal";
+import { useStreamingRenderBuffer } from "@/components/chat-components/hooks/useStreamingRenderBuffer";
 
 const FOOTNOTE_SUFFIX_PATTERN = /^\d+-\d+$/;
 
@@ -350,6 +362,39 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
   // Check if current model has reasoning capability
   const settings = useSettingsValue();
 
+  /**
+   * First-seen timestamp per block index and text segment, used to animate only
+   * blocks that are genuinely revealing and to resume their animation when the
+   * renderer recreates their DOM (see streamingReveal).
+   */
+  const revealedBlockTimesRef = useRef<Map<number, number[]>>(new Map());
+  /**
+   * Reveal state of each segment's streaming tail across commits, used to fade
+   * in only the text at the writing edge (see streamingReveal).
+   */
+  const renderedTailTextRef = useRef<Map<number, AppendedTextState>>(new Map());
+
+  /**
+   * Render buffer: while streaming, text is committed to the renderer on a
+   * fixed cadence instead of per chunk, so output arrives in readable gulps
+   * rather than as a typewriter. Disabled outside streaming, so the final
+   * render is always the complete message.
+   */
+  const bufferedContent = useStreamingRenderBuffer(
+    message.message,
+    isStreaming && message.sender !== USER_SENDER
+  );
+
+  /**
+   * Snapshot the render effect consumes. Identical object while nothing is
+   * buffered, so unrelated message changes (sources, metadata) still propagate.
+   */
+  const renderMessage = useMemo(
+    () =>
+      bufferedContent === message.message ? message : { ...message, message: bufferedContent },
+    [message, bufferedContent]
+  );
+
   const copyToClipboard = () => {
     if (!navigator.clipboard || !navigator.clipboard.writeText) {
       return;
@@ -613,6 +658,27 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
   };
 
   /**
+   * Animate the blocks of a segment that appeared since the previous commit.
+   *
+   * Newly committed output fades in instead of snapping into place. Blocks that
+   * were already on screen are left alone even though the renderer recreated
+   * their DOM, so text never re-animates while it is being extended.
+   *
+   * @param container Segment element that owns the rendered output.
+   * @param ordinal Position of the segment within the message.
+   */
+  const applyStreamReveal = useCallback((container: HTMLElement, ordinal: number): void => {
+    const targets = collectRevealTargets(container);
+    const previousTimes = revealedBlockTimesRef.current.get(ordinal) ?? [];
+    const nextTimes = revealBlocks(targets, previousTimes, {
+      className: revealClassFor(),
+      durationMs: STREAM_REVEAL_DURATION_MS,
+      now: Date.now(),
+    });
+    revealedBlockTimesRef.current.set(ordinal, nextTimes);
+  }, []);
+
+  /**
    * Render one markdown segment into its container, reusing already-rendered
    * output while streaming.
    *
@@ -633,10 +699,12 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         // Final state: render the segment once, in full, and drop any memo.
         container.replaceChildren();
         renderedStablePrefixRef.current.delete(ordinal);
+        renderedTailTextRef.current.delete(ordinal);
         if (content) {
           MarkdownRenderer.renderMarkdown(content, container, "", componentRef.current!);
           normalizeFootnoteRendering(container);
         }
+        applyStreamReveal(container, ordinal);
         return;
       }
 
@@ -682,8 +750,27 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
       } else if (tailDiv) {
         tailDiv.remove();
       }
+
+      // Fade in the text at the writing edge. Without it the block being
+      // written still jumps a gulp at a time, which is what makes the output
+      // feel like it is being spat out paragraph by paragraph.
+      if (tailDiv && unstableTail) {
+        const previousState = renderedTailTextRef.current.get(ordinal) ?? EMPTY_APPENDED_TEXT_STATE;
+        renderedTailTextRef.current.set(
+          ordinal,
+          revealAppendedText(tailDiv, previousState, {
+            className: revealInlineClassFor(),
+            durationMs: STREAM_REVEAL_INLINE_DURATION_MS,
+            now: Date.now(),
+          })
+        );
+      } else {
+        renderedTailTextRef.current.delete(ordinal);
+      }
+
+      applyStreamReveal(container, ordinal);
     },
-    [componentRef, isStreaming]
+    [componentRef, isStreaming, applyStreamReveal]
   );
 
   // Persist collapsible open/closed state during streaming in real time.
@@ -767,7 +854,9 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         overwriteExisting: !isStreaming,
       });
 
-      const originMessage = message.message;
+      // Render the buffered snapshot: text arrives in gulps while streaming and
+      // is always complete once streaming ends.
+      const originMessage = renderMessage.message;
 
       // Parse and extract agent reasoning block if present
       const reasoningBlockData = parseReasoningBlock(originMessage);
@@ -914,6 +1003,9 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         existingSegmentEls.forEach((el, ordinal) => {
           if (!reusedSegmentOrdinals.has(ordinal)) {
             el.remove();
+            revealedBlockTimesRef.current.delete(ordinal);
+            renderedStablePrefixRef.current.delete(ordinal);
+            renderedTailTextRef.current.delete(ordinal);
           }
         });
 
@@ -970,7 +1062,8 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
       isUnmountingRef.current = true;
     };
   }, [
-    message,
+    renderMessage,
+    message.sender,
     app,
     componentRef,
     isStreaming,

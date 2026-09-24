@@ -402,6 +402,58 @@ If your plugin does not need CSS, delete this file.
   margin-top: 0;
 }
 
+/* Streaming reveal: output committed by the render buffer fades in instead of
+ * appearing character by character. The class is only added to blocks that are
+ * new since the previous commit, so text already on screen never re-animates. */
+@keyframes copilot-stream-reveal {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Alternative reveal: wipes in from left to right. */
+@keyframes copilot-stream-reveal-wipe {
+  from {
+    opacity: 0;
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    opacity: 1;
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+.copilot-stream-reveal {
+  animation: copilot-stream-reveal 240ms ease-out both;
+}
+
+.copilot-stream-reveal-wipe {
+  animation: copilot-stream-reveal-wipe 340ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+/* Characters appended to the block currently being written. The duration is
+ * deliberately longer than the render buffer cadence so consecutive gulps
+ * overlap into a continuous dissolve instead of discrete steps. */
+.copilot-stream-reveal-inline {
+  animation: copilot-stream-reveal 280ms ease-out both;
+}
+
+.copilot-stream-reveal-inline-wipe {
+  animation: copilot-stream-reveal-wipe 360ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .copilot-stream-reveal,
+  .copilot-stream-reveal-wipe,
+  .copilot-stream-reveal-inline,
+  .copilot-stream-reveal-inline-wipe {
+    animation: none;
+  }
+}
+
 .message-content h1 {
   font-size: 1.5em;
 }
