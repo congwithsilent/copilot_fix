@@ -111,6 +111,19 @@ describe("normalizeFootnoteRendering", () => {
   });
 });
 
+/**
+ * Let pending animation frames run for the given window.
+ *
+ * The smooth buffer drains its queue from requestAnimationFrame, which jest
+ * drives from the fake clock alongside timers.
+ */
+const runFrames = async (ms: number): Promise<void> => {
+  await act(async () => {
+    jest.advanceTimersByTime(ms);
+    await Promise.resolve();
+  });
+};
+
 describe("ChatSingleMessage", () => {
   const baseMessage: ChatMessage = {
     id: "message-1",
@@ -250,7 +263,7 @@ describe("ChatSingleMessage", () => {
     expect(streamingSection).not.toBeNull();
   });
 
-  it("reveals only the blocks that are new since the previous commit", async () => {
+  it("streams text through the smooth buffer without re-animating shown text", async () => {
     jest.useFakeTimers();
 
     try {
@@ -266,83 +279,45 @@ describe("ChatSingleMessage", () => {
         message: "one",
       };
 
-      const { container, rerender } = render(
+      const view = (content: string) => (
         <TooltipProvider>
           <ChatSingleMessage
-            message={streamingMessage}
+            message={{ ...streamingMessage, message: content }}
             app={createAppStub()}
             isStreaming={true}
             onDelete={() => {}}
           />
         </TooltipProvider>
       );
+
+      const { container, rerender } = render(view("one"));
 
       await act(async () => {
         await Promise.resolve();
       });
 
-      // First commit: the only block is new and animates.
-      expect(
-        Array.from(container.querySelectorAll(".copilot-stream-reveal")).map((el) => el.textContent)
-      ).toEqual(["one"]);
+      expect(container.textContent).toContain("one");
 
-      rerender(
-        <TooltipProvider>
-          <ChatSingleMessage
-            message={{ ...streamingMessage, message: "one\n\ntwo" }}
-            app={createAppStub()}
-            isStreaming={true}
-            onDelete={() => {}}
-          />
-        </TooltipProvider>
-      );
-
-      // Nothing is committed until the render buffer flushes.
+      // New characters sit in the queue: nothing is painted until a frame runs.
+      rerender(view("one\n\ntwo"));
+      await act(async () => {
+        await Promise.resolve();
+      });
       expect(container.textContent).not.toContain("two");
 
-      await act(async () => {
-        jest.advanceTimersByTime(150);
-        await Promise.resolve();
-      });
-
+      await runFrames(400);
       expect(container.textContent).toContain("two");
 
-      // The first block is still inside its reveal window and must be resumed
-      // mid-animation, not restarted; the second block starts fresh.
-      const animated = Array.from(
-        container.querySelectorAll<HTMLElement>(".copilot-stream-reveal")
-      );
-      expect(animated.map((el) => el.textContent)).toEqual(["one", "two"]);
-      expect(animated[0].style.animationDelay).toBe("-150ms");
-      expect(animated[1].style.animationDelay).toBe("");
-
-      // Growing the block that is already on screen must not re-animate it;
-      // only the appended characters fade in.
-      rerender(
-        <TooltipProvider>
-          <ChatSingleMessage
-            message={{ ...streamingMessage, message: "one\n\ntwo three" }}
-            app={createAppStub()}
-            isStreaming={true}
-            onDelete={() => {}}
-          />
-        </TooltipProvider>
-      );
-
-      await act(async () => {
-        jest.advanceTimersByTime(150);
-        await Promise.resolve();
-      });
+      // Growing the block already on screen must fade only the new characters.
+      rerender(view("one\n\ntwo three"));
+      await runFrames(400);
 
       expect(container.textContent).toContain("two three");
-      expect(
-        Array.from(container.querySelectorAll(".copilot-stream-reveal")).map((el) => el.textContent)
-      ).toEqual(["two three"]);
-      expect(
-        Array.from(container.querySelectorAll(".copilot-stream-reveal-inline")).map(
-          (el) => el.textContent
-        )
-      ).toEqual([" three"]);
+      const faded = Array.from(container.querySelectorAll(".copilot-stream-reveal-inline")).map(
+        (el) => el.textContent
+      );
+      expect(faded.join("")).not.toContain("two");
+      expect(faded.join("")).toContain("three");
     } finally {
       jest.useRealTimers();
     }

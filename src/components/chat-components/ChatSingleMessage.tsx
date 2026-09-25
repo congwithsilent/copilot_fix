@@ -48,6 +48,7 @@ import {
 import { findStableMarkdownBoundary } from "@/components/chat-components/utils/streamingMarkdownBoundary";
 import {
   collectRevealTargets,
+  DEFAULT_MAX_REVEAL_MARKS,
   EMPTY_APPENDED_TEXT_STATE,
   revealAppendedText,
   revealBlocks,
@@ -57,7 +58,7 @@ import {
   STREAM_REVEAL_INLINE_DURATION_MS,
   type AppendedTextState,
 } from "@/components/chat-components/utils/streamingReveal";
-import { useStreamingRenderBuffer } from "@/components/chat-components/hooks/useStreamingRenderBuffer";
+import { useSmoothStream } from "@/components/chat-components/hooks/useSmoothStream";
 
 const FOOTNOTE_SUFFIX_PATTERN = /^\d+-\d+$/;
 
@@ -375,24 +376,51 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
   const renderedTailTextRef = useRef<Map<number, AppendedTextState>>(new Map());
 
   /**
-   * Render buffer: while streaming, text is committed to the renderer on a
-   * fixed cadence instead of per chunk, so output arrives in readable gulps
-   * rather than as a typewriter. Disabled outside streaming, so the final
-   * render is always the complete message.
+   * Smooth stream buffer: SSE chunks are pushed into a character queue and
+   * drained by a requestAnimationFrame loop, so frame pacing belongs to the
+   * browser instead of inheriting the transport's batching rhythm. Only the
+   * render loop touches React state.
    */
-  const bufferedContent = useStreamingRenderBuffer(
-    message.message,
-    isStreaming && message.sender !== USER_SENDER
-  );
+  const isBuffering = isStreaming && message.sender !== USER_SENDER;
+  const { displayText, pushChunk, flush, reset } = useSmoothStream({
+    initialText: isBuffering ? message.message : "",
+  });
+  const receivedContentRef = useRef(message.message);
+
+  useEffect(() => {
+    const incoming = message.message;
+    const previous = receivedContentRef.current;
+    receivedContentRef.current = incoming;
+
+    if (!isBuffering) {
+      // Stream ended or was stopped: nothing may stay stranded in the queue.
+      flush();
+      return;
+    }
+
+    if (incoming === previous) {
+      return;
+    }
+
+    if (incoming.startsWith(previous)) {
+      pushChunk(incoming.slice(previous.length));
+    } else {
+      // Replaced rather than extended (edit, regeneration): resync at once.
+      reset(incoming);
+    }
+  }, [message.message, isBuffering, flush, pushChunk, reset]);
+
+  // Outside streaming the authoritative message always wins, so the rendered
+  // text can never lag behind what was actually received.
+  const visibleContent = isBuffering ? displayText : message.message;
 
   /**
    * Snapshot the render effect consumes. Identical object while nothing is
    * buffered, so unrelated message changes (sources, metadata) still propagate.
    */
   const renderMessage = useMemo(
-    () =>
-      bufferedContent === message.message ? message : { ...message, message: bufferedContent },
-    [message, bufferedContent]
+    () => (visibleContent === message.message ? message : { ...message, message: visibleContent }),
+    [message, visibleContent]
   );
 
   const copyToClipboard = () => {
@@ -762,6 +790,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
             className: revealInlineClassFor(),
             durationMs: STREAM_REVEAL_INLINE_DURATION_MS,
             now: Date.now(),
+            maxMarks: DEFAULT_MAX_REVEAL_MARKS,
           })
         );
       } else {

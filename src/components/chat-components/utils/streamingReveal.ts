@@ -41,6 +41,13 @@ export const STREAM_REVEAL_DURATION_MS = 240;
 export const STREAM_REVEAL_INLINE_DURATION_MS = 280;
 
 /**
+ * Default cap on concurrently fading gulps. Sized for a rAF-driven loop: at
+ * 60fps this holds roughly 280ms of history, i.e. a full fade, while keeping
+ * the number of spans rewritten every frame bounded.
+ */
+export const DEFAULT_MAX_REVEAL_MARKS = 16;
+
+/**
  * Resolve the CSS class for a variant.
  *
  * @param variant Reveal variant.
@@ -202,6 +209,11 @@ export interface RevealAppendedTextOptions {
   durationMs: number;
   /** Current timestamp. */
   now: number;
+  /**
+   * Upper bound on tracked gulps. At rAF cadence a gulp lands every frame, so
+   * the queue is capped to keep the amount of per-frame span rewriting bounded.
+   */
+  maxMarks?: number;
 }
 
 /**
@@ -231,7 +243,7 @@ export function revealAppendedText(
   previous: AppendedTextState,
   options: RevealAppendedTextOptions
 ): AppendedTextState {
-  const { className, durationMs, now } = options;
+  const { className, durationMs, now, maxMarks = DEFAULT_MAX_REVEAL_MARKS } = options;
   const currentText = container?.textContent ?? "";
   const settledState: AppendedTextState = {
     text: currentText,
@@ -251,15 +263,22 @@ export function revealAppendedText(
 
   // Retire gulps whose animation has finished; their text is settled now.
   let settled = Math.min(previousSettled, previousText.length);
-  const marks: RevealMark[] = [];
+  const fresh: RevealMark[] = [];
   for (const mark of previousMarks) {
     if (now - mark.at >= durationMs) {
       settled = Math.max(settled, mark.length);
     } else {
-      marks.push(mark);
+      fresh.push(mark);
     }
   }
-  marks.push({ length: currentText.length, at: now });
+  fresh.push({ length: currentText.length, at: now });
+
+  // Bound how much per-frame work the reveal can cost: beyond the cap the
+  // oldest gulps are promoted to settled even though they are not quite done.
+  const marks = fresh.slice(-Math.max(1, maxMarks));
+  for (const dropped of fresh.slice(0, fresh.length - marks.length)) {
+    settled = Math.max(settled, dropped.length);
+  }
 
   const textNode = findLastVisibleTextNode(container);
   if (!textNode || settled >= currentText.length) {

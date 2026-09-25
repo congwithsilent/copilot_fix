@@ -155,6 +155,23 @@ describe("revealAppendedText", () => {
     expect(next.settled).toBe(11);
   });
 
+  it("caps how many gulps stay animated so per-frame work stays bounded", () => {
+    const container = document.createElement("div");
+    const text = "y".repeat(30);
+    container.innerHTML = `<p>${text}</p>`;
+
+    // Twenty still-fading gulps, more than the cap allows.
+    const marks = Array.from({ length: 20 }, (_unused, index) => ({ length: index + 1, at: 900 }));
+    const previous = { text: "y".repeat(20), settled: 0, marks };
+
+    const next = revealAppendedText(container, previous, { ...OPTIONS, maxMarks: 8 });
+
+    expect(next.marks).toHaveLength(8);
+    // The twelve oldest previous gulps plus this commit replace themselves into
+    // settled state instead of lingering as animated spans.
+    expect(next.settled).toBe(13);
+  });
+
   it("wraps text inside the deepest inline element", () => {
     const container = document.createElement("div");
     container.innerHTML = "<p>hello <strong>world</strong></p>";
