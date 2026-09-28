@@ -6,6 +6,7 @@ import {
   DEFAULT_OLLAMA_NUM_CTX,
   ModelCapability,
   ProviderInfo,
+  ReasoningEffort,
 } from "@/constants";
 import { getDecryptedKey } from "@/encryptionService";
 import { logError, logInfo } from "@/logger";
@@ -322,14 +323,12 @@ export default class ChatModelManager {
             "X-Title": "Obsidian Copilot",
           },
         },
-        // Enable reasoning if the model has the reasoning capability
-        enableReasoning: customModel.capabilities?.includes(ModelCapability.REASONING) ?? false,
-        // Pass reasoning effort if configured and reasoning capability is enabled
-        reasoningEffort:
-          customModel.capabilities?.includes(ModelCapability.REASONING) &&
-          customModel.reasoningEffort
-            ? customModel.reasoningEffort
-            : undefined,
+        // Enable reasoning if the model has the reasoning capability or if reasoningEffort is explicitly set
+        enableReasoning:
+          (customModel.capabilities?.includes(ModelCapability.REASONING) ?? false) ||
+          Boolean(customModel.reasoningEffort),
+        // Pass reasoning effort if configured
+        reasoningEffort: customModel.reasoningEffort || undefined,
         // Enable prompt caching by default; can be turned off for ZDR endpoints
         enablePromptCaching: customModel.enablePromptCaching ?? true,
       },
@@ -345,9 +344,11 @@ export default class ChatModelManager {
         headers: {
           Authorization: `Bearer ${await getDecryptedKey(customModel.apiKey || "default-key")}`,
         },
-        // Enable thinking for models with REASONING capability (e.g., qwen3, deepseek-r1)
-        // Thinking content goes to additional_kwargs.reasoning_content
-        think: customModel.capabilities?.includes(ModelCapability.REASONING) ?? false,
+        // Enable thinking for models with REASONING capability, unless explicitly set to none
+        think:
+          customModel.reasoningEffort === ReasoningEffort.NONE
+            ? false
+            : (customModel.capabilities?.includes(ModelCapability.REASONING) ?? false),
         // Reduce repetition in local models (1.1 = slight penalty, helps with hallucination loops)
         repeatPenalty: 1.1,
         numCtx: customModel.numCtx ?? DEFAULT_OLLAMA_NUM_CTX,
@@ -360,14 +361,14 @@ export default class ChatModelManager {
           baseURL: customModel.baseUrl || "http://localhost:1234/v1",
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
-        // Enable reasoning extraction for models with REASONING capability
-        enableReasoning: customModel.capabilities?.includes(ModelCapability.REASONING) ?? false,
-        // Pass reasoning effort if configured and reasoning capability is enabled
-        reasoningEffort:
-          customModel.capabilities?.includes(ModelCapability.REASONING) &&
-          customModel.reasoningEffort
-            ? customModel.reasoningEffort
-            : undefined,
+        // Enable reasoning extraction for models with REASONING capability or explicit effort
+        enableReasoning:
+          (customModel.capabilities?.includes(ModelCapability.REASONING) ?? false) ||
+          Boolean(customModel.reasoningEffort),
+        reasoningEffort: customModel.reasoningEffort || undefined,
+        modelKwargs: customModel.reasoningEffort
+          ? { reasoning_effort: customModel.reasoningEffort }
+          : undefined,
       },
       [ChatModelProviders.OPENAI_FORMAT]: {
         modelName: modelName,
@@ -378,6 +379,7 @@ export default class ChatModelManager {
           fetch: customModel.enableCors ? safeFetch : undefined,
           defaultHeaders: { "dangerously-allow-browser": "true" },
         },
+        reasoningEffort: customModel.reasoningEffort,
         ...this.getOpenAISpecialConfig(
           modelName,
           customModel.maxTokens ?? settings.maxTokens,
@@ -392,6 +394,7 @@ export default class ChatModelManager {
           baseURL: customModel.baseUrl || ProviderInfo[ChatModelProviders.SILICONFLOW].host,
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
+        reasoningEffort: customModel.reasoningEffort,
         ...this.getOpenAISpecialConfig(
           modelName,
           customModel.maxTokens ?? settings.maxTokens,
@@ -419,6 +422,9 @@ export default class ChatModelManager {
           baseURL: customModel.baseUrl || ProviderInfo[ChatModelProviders.DEEPSEEK].host,
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
+        modelKwargs: customModel.reasoningEffort
+          ? { reasoning_effort: customModel.reasoningEffort }
+          : undefined,
       },
       [ChatModelProviders.AMAZON_BEDROCK]: {} as BedrockChatModelFields,
       [ChatModelProviders.GITHUB_COPILOT]: {
@@ -493,11 +499,18 @@ export default class ChatModelManager {
       temperature: resolvedTemperature,
     };
 
-    // Add reasoning parameters for O-series and GPT-5 models
-    // LangChain 0.6.6 will handle the endpoint routing and parameter conversion
-    if ((modelInfo.isOSeries || modelInfo.isGPT5) && customModel?.reasoningEffort) {
+    // Add reasoning parameters for models that configure reasoningEffort
+    // In LangChain's ChatOpenAICompletions, modelKwargs is spread directly into the request params,
+    // guaranteeing that reasoning_effort is unconditionally included in the HTTP request payload
+    // even for models outside LangChain's hardcoded isReasoningModel list.
+    if (customModel?.reasoningEffort) {
       config.reasoning = {
         effort: customModel.reasoningEffort,
+      };
+      config.reasoningEffort = customModel.reasoningEffort;
+      config.modelKwargs = {
+        ...(config.modelKwargs || {}),
+        reasoning_effort: customModel.reasoningEffort,
       };
 
       // Add verbosity for GPT-5 models (Responses API only).

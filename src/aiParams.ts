@@ -179,8 +179,8 @@ export interface CustomModel {
   // Amazon Bedrock specific fields
   bedrockRegion?: string;
 
-  // OpenAI GPT-5 and O-series specific fields
-  reasoningEffort?: ReasoningEffort;
+  // Reasoning effort across supported models and providers
+  reasoningEffort?: ReasoningEffort | string;
   verbosity?: Verbosity;
 
   // Thinking configuration (e.g. Ark / OpenAI compatible endpoints)

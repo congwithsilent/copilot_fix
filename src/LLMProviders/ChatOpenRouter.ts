@@ -27,12 +27,10 @@ export interface ChatOpenRouterInput extends BaseChatModelParams {
   enableReasoning?: boolean;
 
   /**
-   * Reasoning effort level: "minimal", "low", "medium", "high", or "xhigh"
+   * Reasoning effort level (e.g. "none", "minimal", "low", "medium", "high", "xhigh", "max", "auto")
    * Controls the amount of reasoning the model uses
-   * Note: "minimal" will be treated as "low" for OpenRouter
-   * Note: "xhigh" is only supported by GPT-5.4 models
    */
-  reasoningEffort?: "minimal" | "low" | "medium" | "high" | "xhigh";
+  reasoningEffort?: string;
 
   /**
    * Enable prompt caching (cache_control) for OpenRouter requests.
@@ -57,7 +55,7 @@ export interface ChatOpenRouterInput extends BaseChatModelParams {
 
 export class ChatOpenRouter extends ChatOpenAI {
   private enableReasoning: boolean;
-  private reasoningEffort?: "minimal" | "low" | "medium" | "high" | "xhigh";
+  private reasoningEffort?: string;
   private enablePromptCaching: boolean;
   private openaiClient: OpenAI;
   /** True when the configured baseURL belongs to the OpenRouter gateway. */
@@ -113,23 +111,19 @@ export class ChatOpenRouter extends ChatOpenAI {
         ? { ...baseParams, cache_control: { type: "ephemeral" } }
         : baseParams;
 
-    // Add reasoning parameter if enabled
-    if (this.enableReasoning) {
+    // Add reasoning parameter if enabled or if reasoningEffort is explicitly specified
+    if (this.enableReasoning || this.reasoningEffort) {
       // Per OpenRouter docs:
-      // - For Anthropic models: MUST use reasoning.max_tokens or reasoning.effort
-      // - For other models: Can use reasoning.enabled
-      // - max_tokens must be strictly higher than reasoning budget
-
-      // Prefer effort if provided, otherwise fall back to max_tokens
+      // - For models supporting effort: reasoning.effort or reasoning_effort
+      // - Prefer effort if provided, otherwise fall back to max_tokens
       if (this.reasoningEffort) {
-        // Map "minimal" to "low" since OpenRouter doesn't support "minimal"
-        const effort = this.reasoningEffort === "minimal" ? "low" : this.reasoningEffort;
-        logInfo(`OpenRouter reasoning enabled with effort: ${effort}`);
+        logInfo(`OpenRouter reasoning enabled with effort: ${this.reasoningEffort}`);
         return {
           ...withCaching,
           reasoning: {
-            effort,
+            effort: this.reasoningEffort,
           },
+          reasoning_effort: this.reasoningEffort,
         };
       } else {
         logInfo(`OpenRouter reasoning enabled with max_tokens: 1024`);

@@ -82,23 +82,40 @@ class ChatOpenAIFormatCompletions extends ChatOpenAICompletions {
   }
 
   public thinking?: { type: string; [key: string]: any };
+  public reasoningEffort?: string;
 
   constructor(fields?: any) {
     super(fields);
+    if (fields?.reasoningEffort) {
+      this.reasoningEffort = fields.reasoningEffort;
+    } else if (fields?.reasoning?.effort) {
+      this.reasoningEffort = fields.reasoning.effort;
+    }
+
     if (fields?.thinking) {
       this.thinking = fields.thinking;
-    } else if (fields?.disableThinking) {
+    } else if (fields?.disableThinking || this.reasoningEffort === "none") {
       this.thinking = { type: "disabled" };
     }
   }
 
   /**
    * Intercept requests sent to the OpenAI client to normalize payloads for
-   * OpenAI-compatible providers (such as Volcano Ark / 火山方舟):
-   * 1. Inject top-level `thinking` parameter if configured (e.g. `{ type: "disabled" }`).
-   * 2. Ensure multimodal user messages have file parts before text parts.
+   * OpenAI-compatible providers (such as Volcano Ark / 火山方舟, SiliconFlow, DeepSeek, etc.):
+   * 1. Inject explicit `reasoning_effort` and `reasoning.effort` if configured.
+   * 2. Inject top-level `thinking` parameter if configured (e.g. `{ type: "disabled" }`).
+   * 3. Ensure multimodal user messages have file parts before text parts.
    */
   override async completionWithRetry(request: any, requestOptions?: any): Promise<any> {
+    if (this.reasoningEffort && request) {
+      if (request.reasoning_effort === undefined) {
+        request.reasoning_effort = this.reasoningEffort;
+      }
+      if (request.reasoning === undefined) {
+        request.reasoning = { effort: this.reasoningEffort };
+      }
+    }
+
     if (this.thinking && request && request.thinking === undefined) {
       request.thinking = this.thinking;
     }
@@ -117,10 +134,11 @@ class ChatOpenAIFormatCompletions extends ChatOpenAICompletions {
   }
 }
 
-/** Constructor fields for {@link ChatOpenAIFormat}. Mirrors `ChatOpenAI` fields with thinking additions. */
+/** Constructor fields for {@link ChatOpenAIFormat}. Mirrors `ChatOpenAI` fields with thinking and reasoning additions. */
 export type ChatOpenAIFormatFields = ConstructorParameters<typeof ChatOpenAI>[0] & {
   thinking?: { type: string; [key: string]: any };
   disableThinking?: boolean;
+  reasoningEffort?: string;
 };
 
 /**
@@ -135,13 +153,20 @@ export type ChatOpenAIFormatFields = ConstructorParameters<typeof ChatOpenAI>[0]
  */
 export class ChatOpenAIFormat extends ChatOpenAI {
   public thinking?: { type: string; [key: string]: any };
+  public reasoningEffort?: string;
 
   constructor(fields?: ChatOpenAIFormatFields) {
     super(fields);
 
+    if (fields?.reasoningEffort) {
+      this.reasoningEffort = fields.reasoningEffort;
+    } else if (fields?.reasoning?.effort) {
+      this.reasoningEffort = fields.reasoning.effort;
+    }
+
     if (fields?.thinking) {
       this.thinking = fields.thinking;
-    } else if (fields?.disableThinking) {
+    } else if (fields?.disableThinking || this.reasoningEffort === "none") {
       this.thinking = { type: "disabled" };
     }
 
@@ -151,6 +176,7 @@ export class ChatOpenAIFormat extends ChatOpenAI {
     this.completions = new ChatOpenAIFormatCompletions({
       ...fields,
       thinking: this.thinking,
+      reasoningEffort: this.reasoningEffort,
     } as any);
 
     logInfo("[ChatOpenAIFormat] Initialized with streaming delta normalization");
@@ -168,6 +194,7 @@ export class ChatOpenAIFormat extends ChatOpenAI {
     const newModel = new ChatOpenAIFormat({
       ...(this.fields as ChatOpenAIFormatFields),
       thinking: this.thinking,
+      reasoningEffort: this.reasoningEffort,
     });
     newModel.defaultOptions = {
       ...this.defaultOptions,

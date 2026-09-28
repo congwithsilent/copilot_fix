@@ -212,38 +212,54 @@ export function ModelParametersEditor({
             onChange={(value) => onChange("reasoningEffort", value)}
             disableFn={onReset ? () => onReset("reasoningEffort") : undefined}
             defaultValue={settings.reasoningEffort ?? getDefaultReasoningEffort()}
-            options={[
-              ...(model.name.startsWith("gpt-5") && model.provider === "openai"
-                ? [{ value: ReasoningEffort.MINIMAL, label: "Minimal" }]
-                : []),
-              ...REASONING_EFFORT_OPTIONS.filter(
-                (opt) =>
-                  opt.value !== ReasoningEffort.MINIMAL && opt.value !== ReasoningEffort.XHIGH
-              ),
-              ...(model.name.startsWith("gpt-5.4") && model.provider === "openai"
-                ? [{ value: ReasoningEffort.XHIGH, label: "Extra High" }]
-                : []),
-            ]}
+            options={(() => {
+              const opts = [...REASONING_EFFORT_OPTIONS];
+              if (reasoningEffort && !opts.some((opt) => opt.value === reasoningEffort)) {
+                opts.push({
+                  value: reasoningEffort as ReasoningEffort,
+                  label: `Custom (${reasoningEffort})`,
+                });
+              }
+              return opts;
+            })()}
             helpText={
               <>
                 <p>
                   Controls the amount of reasoning effort the model uses. Higher effort provides
-                  more thorough reasoning but takes longer.
+                  more thorough reasoning but takes longer. Supported across OpenAI, OpenRouter, and
+                  OpenAI-compatible/domestic endpoints.
                 </p>
                 <ul className="tw-mt-2 tw-space-y-1 tw-text-xs">
-                  {model.name.startsWith("gpt-5") && model.provider === "openai" && (
-                    <li>Minimal: Fastest responses, minimal reasoning (GPT-5 only)</li>
-                  )}
-                  <li>Low: Faster responses, basic reasoning (default)</li>
-                  <li>Medium: Balanced performance</li>
-                  <li>High: Thorough reasoning, slower responses</li>
-                  {model.name.startsWith("gpt-5.4") && model.provider === "openai" && (
-                    <li>Extra High: Maximum reasoning depth (GPT-5.4 only)</li>
-                  )}
+                  <li>
+                    <strong>None:</strong> Disable reasoning / thinking tokens
+                  </li>
+                  <li>
+                    <strong>Minimal:</strong> Fastest response, minimal thinking (e.g. GPT-5)
+                  </li>
+                  <li>
+                    <strong>Low:</strong> Faster responses, basic reasoning (default)
+                  </li>
+                  <li>
+                    <strong>Medium:</strong> Balanced performance and thoroughness
+                  </li>
+                  <li>
+                    <strong>High:</strong> In-depth reasoning and rigorous validation
+                  </li>
+                  <li>
+                    <strong>Extra High:</strong> Maximum depth for o-series / GPT-5.4 (xhigh)
+                  </li>
+                  <li>
+                    <strong>Max:</strong> Full-budget / maximum thinking depth (common in Chinese
+                    models & gateways)
+                  </li>
+                  <li>
+                    <strong>Auto:</strong> Automatically managed by model / gateway
+                  </li>
                 </ul>
                 {!hasReasoningCapability && !isOpenAIReasoningModel && (
                   <p className="tw-mt-2 tw-text-warning">
-                    Enable the &quot;Reasoning&quot; capability above to use this feature.
+                    Tip: Enable the &quot;Reasoning&quot; capability above to ensure thinking
+                    streamer is active.
                   </p>
                 )}
               </>

@@ -144,11 +144,14 @@ export type PlusUtmMedium = (typeof PLUS_UTM_MEDIUMS)[keyof typeof PLUS_UTM_MEDI
  * Reasoning effort levels for OpenAI reasoning models
  */
 export enum ReasoningEffort {
+  NONE = "none",
   MINIMAL = "minimal",
   LOW = "low",
   MEDIUM = "medium",
   HIGH = "high",
   XHIGH = "xhigh",
+  MAX = "max",
+  AUTO = "auto",
 }
 
 /**

@@ -218,5 +218,54 @@ describe("ChatOpenAIFormat", () => {
       expect(request.messages[0].content[0].type).toBe("file");
       expect(request.messages[0].content[1].type).toBe("text");
     });
+
+    it("injects explicit reasoning_effort and reasoning.effort when reasoningEffort is provided", async () => {
+      const model = new ChatOpenAIFormat({
+        modelName: "deepseek-r1-compatible",
+        apiKey: "test-key",
+        reasoningEffort: "max",
+      });
+      const completions = (model as any).completions;
+      const mockCreate = jest.fn().mockResolvedValue({});
+      completions.client = { chat: { completions: { create: mockCreate } } };
+      completions.caller = { call: async (fn: any) => fn() };
+
+      const request: any = {
+        model: "deepseek-r1-compatible",
+        messages: [{ role: "user", content: "solve this" }],
+      };
+      await completions.completionWithRetry(request);
+
+      expect(request.reasoning_effort).toBe("max");
+      expect(request.reasoning).toEqual({ effort: "max" });
+      expect(mockCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          reasoning_effort: "max",
+          reasoning: { effort: "max" },
+        }),
+        expect.anything()
+      );
+    });
+
+    it("injects disabled thinking when reasoningEffort is 'none'", async () => {
+      const model = new ChatOpenAIFormat({
+        modelName: "test-model",
+        apiKey: "test-key",
+        reasoningEffort: "none",
+      });
+      const completions = (model as any).completions;
+      const mockCreate = jest.fn().mockResolvedValue({});
+      completions.client = { chat: { completions: { create: mockCreate } } };
+      completions.caller = { call: async (fn: any) => fn() };
+
+      const request: any = {
+        model: "test-model",
+        messages: [{ role: "user", content: "hello" }],
+      };
+      await completions.completionWithRetry(request);
+
+      expect(request.reasoning_effort).toBe("none");
+      expect(request.thinking).toEqual({ type: "disabled" });
+    });
   });
 });
