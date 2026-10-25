@@ -36,7 +36,7 @@ describe("AgentReasoningBlock", () => {
     const collapsible = screen.getByTestId("collapsible");
     expect(collapsible.getAttribute("data-open")).toBe("false");
     // Header stays visible with the active indicator and timer.
-    expect(screen.getByText("Reasoning")).toBeTruthy();
+    expect(screen.getByText("Agent working")).toBeTruthy();
     expect(screen.getByText("5s")).toBeTruthy();
   });
 
@@ -52,7 +52,7 @@ describe("AgentReasoningBlock", () => {
 
     const collapsible = screen.getByTestId("collapsible");
     expect(collapsible.getAttribute("data-open")).toBe("false");
-    expect(screen.getByText("Thought for")).toBeTruthy();
+    expect(screen.getByText("Agent activity")).toBeTruthy();
   });
 
   it("renders nothing when idle", () => {

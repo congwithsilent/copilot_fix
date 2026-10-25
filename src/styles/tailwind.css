@@ -1639,3 +1639,131 @@ body.is-mobile div[data-radix-popper-content-wrapper] {
     opacity: 0.6;
   }
 }
+
+/* ---------------------------------------------------------------------------
+ * Note-centered workspace shell
+ *
+ * The conversation stays single-column in every container. Width caps only
+ * appear when the view has room, while colors and type remain theme-driven.
+ * ------------------------------------------------------------------------ */
+
+.copilot-chat-header {
+  min-height: 42px;
+  background-color: var(--background-primary);
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.copilot-chat-column {
+  width: 100%;
+  max-width: 52rem;
+  margin-inline: auto;
+}
+
+.copilot-composer {
+  box-shadow: 0 0 0 1px transparent;
+}
+
+.copilot-composer:focus-within {
+  box-shadow: 0 0 0 1px var(--background-modifier-border-focus);
+}
+
+.copilot-send-button {
+  box-shadow: none;
+}
+
+.copilot-context-items:empty {
+  display: none;
+}
+
+.copilot-message-user {
+  margin-top: 12px;
+}
+
+.copilot-message-ai {
+  margin-bottom: 16px;
+}
+
+.copilot-message-user-surface {
+  background-color: var(--background-modifier-hover);
+  box-shadow: inset 2px 0 0 var(--interactive-accent);
+}
+
+.copilot-message-ai-surface {
+  padding-top: 4px;
+  padding-bottom: 4px;
+}
+
+.copilot-empty-state {
+  max-width: 44rem;
+  margin-inline: auto;
+}
+
+.copilot-prompt-row {
+  transition: background-color 120ms ease-out;
+}
+
+.copilot-prompt-row:hover {
+  background-color: var(--background-modifier-hover);
+}
+
+.copilot-tool-call {
+  margin-left: 4px;
+  padding-left: 6px;
+  border-left: 1px solid var(--background-modifier-border);
+}
+
+.copilot-tool-surface {
+  transition: background-color 120ms ease-out;
+}
+
+.copilot-settings-layout {
+  display: flex;
+  flex-direction: column;
+  gap: var(--size-4-4);
+  margin-top: var(--size-4-4);
+}
+
+.copilot-settings-nav {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: var(--size-4-1);
+}
+
+.copilot-settings-content {
+  min-width: 0;
+}
+
+@media (min-width: 760px) {
+  .copilot-settings-layout {
+    display: grid;
+    grid-template-columns: 180px minmax(0, 1fr);
+    align-items: start;
+    gap: var(--size-4-6);
+  }
+
+  .copilot-settings-nav {
+    position: sticky;
+    top: 0;
+    display: flex;
+    flex-direction: column;
+  }
+}
+
+@container chat-input (max-width: 360px) {
+  .copilot-send-button span {
+    display: none;
+  }
+
+  .copilot-send-button {
+    padding-inline: var(--size-4-2);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .copilot-prompt-row,
+  .copilot-tool-surface,
+  .copilot-message-actions,
+  .copilot-settings-tab {
+    transition: none;
+  }
+}

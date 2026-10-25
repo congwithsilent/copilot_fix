@@ -40,9 +40,11 @@ export const ChatButtons: React.FC<ChatButtonsProps> = ({
 }) => {
   return (
     <div
-      className={cn("tw-flex tw-gap-1", {
-        "group-hover:opacity-100 opacity-0": !Platform.isMobile,
-      })}
+      className={cn(
+        "copilot-message-actions tw-flex tw-items-center tw-gap-0.5",
+        !Platform.isMobile &&
+          "tw-opacity-0 tw-transition-opacity group-focus-within:tw-opacity-100 group-hover:tw-opacity-100"
+      )}
     >
       {message.sender === USER_SENDER ? (
         <>

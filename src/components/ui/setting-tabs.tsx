@@ -1,5 +1,5 @@
-import React from "react";
 import { cn } from "@/lib/utils";
+import React from "react";
 
 export interface TabItem {
   icon: React.ReactNode;
@@ -11,66 +11,34 @@ interface TabItemProps {
   tab: TabItem;
   isSelected: boolean;
   onClick: () => void;
-  isFirst: boolean;
-  isLast: boolean;
 }
 
-export const TabItem: React.FC<TabItemProps> = ({ tab, isSelected, onClick, isFirst, isLast }) => {
+/** Render a keyboard-focusable settings navigation item. */
+export const TabItem: React.FC<TabItemProps> = ({ tab, isSelected, onClick }) => {
   return (
-    <div
+    <button
+      type="button"
       role="tab"
       id={`tab-${tab.id}`}
       aria-controls={`tabpanel-${tab.id}`}
       aria-selected={isSelected}
+      tabIndex={isSelected ? 0 : -1}
       onClick={onClick}
       className={cn(
-        "tw-flex tw-flex-row tw-items-center",
-        "tw-h-8",
-        "tw-px-2 tw-py-1",
-        "tw-gap-1.5",
-        "tw-cursor-pointer",
-        "tw-overflow-hidden",
-        "tw-whitespace-nowrap",
-        "tw-text-sm",
-        "tw-rounded-t-sm",
-        "tw-bg-secondary-alt",
-        "tw-transition-all tw-duration-300 tw-ease-in-out",
-        "hover:tw-bg-modifier-hover",
-        isSelected && [
-          "!tw-bg-interactive-accent",
-          "tw-text-on-accent",
-          "!tw-max-w-full",
-          "tw-transition-all tw-duration-300 tw-ease-in-out",
-          "tw-delay-100",
-        ],
-        "lg:tw-max-w-32",
-        "md:tw-max-w-32"
+        "copilot-settings-tab tw-flex tw-h-9 tw-w-full tw-items-center tw-gap-2 tw-rounded-md !tw-bg-transparent tw-px-2.5 tw-text-left tw-text-sm tw-text-muted !tw-shadow-none tw-transition-colors hover:!tw-bg-modifier-hover hover:tw-text-normal",
+        isSelected && "!tw-bg-secondary-alt tw-font-medium tw-text-normal"
       )}
     >
-      <div
+      <span
         className={cn(
-          "tw-flex tw-items-center tw-justify-center",
-          "tw-size-4",
-          "tw-transition-transform tw-duration-200 tw-ease-in-out",
-          isSelected
-            ? "tw-max-w-[16px] tw-translate-x-0 tw-opacity-100"
-            : "tw-max-w-0 tw--translate-x-4 tw-opacity-0"
+          "tw-flex tw-size-4 tw-shrink-0 tw-items-center tw-justify-center",
+          isSelected && "tw-text-accent"
         )}
       >
         {tab.icon}
-      </div>
-      <span
-        className={cn(
-          "tw-text-sm",
-          "tw-font-medium",
-          "tw-transition-all tw-duration-200 tw-ease-in-out",
-          "tw-overflow-hidden tw-whitespace-nowrap",
-          "tw-max-w-[100px] tw-translate-x-0 tw-opacity-100"
-        )}
-      >
-        {tab.label}
       </span>
-    </div>
+      <span className="tw-truncate">{tab.label}</span>
+    </button>
   );
 };
 
@@ -80,21 +48,17 @@ interface TabContentProps {
   isSelected: boolean;
 }
 
+/** Preserve tab/panel relationships without mounting inactive settings panels. */
 export const TabContent: React.FC<TabContentProps> = ({ id, children, isSelected }) => {
-  if (!isSelected) return null;
-
   return (
     <div
       role="tabpanel"
       id={`tabpanel-${id}`}
       aria-labelledby={`tab-${id}`}
-      className={cn(
-        "tw-pt-4",
-        "tw-transition-all tw-duration-200 tw-ease-in-out",
-        isSelected ? "tw-translate-y-0 tw-opacity-100" : "tw-translate-y-2 tw-opacity-0"
-      )}
+      className="tw-min-w-0"
+      hidden={!isSelected}
     >
-      {children}
+      {isSelected ? children : null}
     </div>
   );
 };

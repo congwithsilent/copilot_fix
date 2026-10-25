@@ -1,9 +1,21 @@
-import { getCurrentProject, setCurrentProject, setProjectLoading, useChainType } from "@/aiParams";
+import {
+  getCurrentProject,
+  ProjectConfig,
+  setCurrentProject,
+  setProjectLoading,
+  useChainType,
+  useCurrentProject,
+} from "@/aiParams";
 import { ProjectContextCache } from "@/cache/projectContextCache";
 import { ChainType } from "@/chainFactory";
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { Button } from "@/components/ui/button";
-import { DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
+import {
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+} from "@/components/ui/dropdown-menu";
 import { SettingSwitch } from "@/components/ui/setting-switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { PLUS_UTM_MEDIUMS } from "@/constants";
@@ -189,6 +201,7 @@ interface ChatControlsProps {
   onSaveAsNote: () => Promise<void>;
   onLoadHistory: () => void;
   onModeChange: (mode: ChainType) => void;
+  onProjectSelected?: () => void;
   onCloseProject?: () => void;
   chatHistory: ChatHistoryItem[];
   onUpdateChatTitle: (id: string, newTitle: string) => Promise<void>;
@@ -203,6 +216,7 @@ export function ChatControls({
   onSaveAsNote,
   onLoadHistory,
   onModeChange,
+  onProjectSelected,
   onCloseProject,
   chatHistory,
   onUpdateChatTitle,
@@ -213,6 +227,7 @@ export function ChatControls({
 }: ChatControlsProps) {
   const settings = useSettingsValue();
   const [selectedChain, setSelectedChain] = useChainType();
+  const [currentProject] = useCurrentProject();
   const isPlusUser = useIsPlusUser();
 
   const handleModeChange = async (chainType: ChainType) => {
@@ -232,49 +247,56 @@ export function ChatControls({
     }
   };
 
+  const handleProjectSelection = (project: ProjectConfig) => {
+    void handleModeChange(ChainType.PROJECT_CHAIN);
+    setCurrentProject(project);
+    onProjectSelected?.();
+  };
+
+  const modeLabel =
+    selectedChain === ChainType.PROJECT_CHAIN
+      ? currentProject?.name || "Projects"
+      : selectedChain === ChainType.VAULT_QA_CHAIN
+        ? "Vault QA"
+        : selectedChain === ChainType.COPILOT_PLUS_CHAIN
+          ? "Copilot Plus"
+          : "Chat";
+
   return (
-    <div className="tw-flex tw-w-full tw-items-center tw-justify-between tw-p-1">
-      <div className="tw-flex-1">
+    <div className="copilot-chat-header tw-flex tw-w-full tw-items-center tw-justify-between tw-gap-1 tw-px-2 tw-py-1.5 tw-@container/chat-header">
+      <div className="tw-min-w-0 tw-flex-1">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost2" size="fit" className="tw-ml-1 tw-text-sm tw-text-muted">
-              {selectedChain === ChainType.LLM_CHAIN && "chat (free)"}
-              {selectedChain === ChainType.VAULT_QA_CHAIN && "vault QA (free)"}
+            <Button
+              variant="ghost2"
+              size="fit"
+              className="tw-max-w-full tw-gap-1.5 tw-rounded-md tw-px-2 tw-py-1 tw-text-sm tw-font-semibold tw-text-normal"
+              aria-label="Switch conversation mode or project"
+            >
               {selectedChain === ChainType.COPILOT_PLUS_CHAIN && (
-                <div className="tw-flex tw-items-center tw-gap-1">
-                  <Sparkles className="tw-size-4" />
-                  copilot plus
-                </div>
+                <Sparkles className="tw-size-4 tw-text-accent" />
               )}
-              {selectedChain === ChainType.PROJECT_CHAIN && "projects (alpha)"}
-              <ChevronDown className="tw-mt-0.5 tw-size-5" />
+              {selectedChain === ChainType.PROJECT_CHAIN && (
+                <LibraryBig className="tw-size-4 tw-text-accent" />
+              )}
+              <span className="tw-truncate">{modeLabel}</span>
+              <ChevronDown className="tw-size-3.5 tw-text-muted" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start">
-            <DropdownMenuItem
-              onSelect={() => {
-                handleModeChange(ChainType.LLM_CHAIN);
-              }}
-            >
-              chat (free)
+          <DropdownMenuContent align="start" side="bottom" className="tw-w-60">
+            <DropdownMenuLabel className="tw-text-xs tw-font-normal tw-text-muted">
+              Conversation
+            </DropdownMenuLabel>
+            <DropdownMenuItem onSelect={() => handleModeChange(ChainType.LLM_CHAIN)}>
+              Chat
             </DropdownMenuItem>
-            <DropdownMenuItem
-              onSelect={() => {
-                handleModeChange(ChainType.VAULT_QA_CHAIN);
-              }}
-            >
-              vault QA (free)
+            <DropdownMenuItem onSelect={() => handleModeChange(ChainType.VAULT_QA_CHAIN)}>
+              Vault QA
             </DropdownMenuItem>
             {isPlusUser ? (
-              <DropdownMenuItem
-                onSelect={() => {
-                  handleModeChange(ChainType.COPILOT_PLUS_CHAIN);
-                }}
-              >
-                <div className="tw-flex tw-items-center tw-gap-1">
-                  <Sparkles className="tw-size-4" />
-                  copilot plus
-                </div>
+              <DropdownMenuItem onSelect={() => handleModeChange(ChainType.COPILOT_PLUS_CHAIN)}>
+                <Sparkles className="tw-size-4 tw-text-accent" />
+                Copilot Plus
               </DropdownMenuItem>
             ) : (
               <DropdownMenuItem
@@ -283,21 +305,41 @@ export function ChatControls({
                   onCloseProject?.();
                 }}
               >
-                copilot plus
-                <SquareArrowOutUpRight className="tw-size-3" />
+                <Sparkles className="tw-size-4" />
+                Copilot Plus
+                <SquareArrowOutUpRight className="tw-ml-auto tw-size-3" />
               </DropdownMenuItem>
             )}
 
+            <DropdownMenuSeparator className="tw-bg-secondary-alt" />
+            <DropdownMenuLabel className="tw-text-xs tw-font-normal tw-text-muted">
+              Workspaces
+            </DropdownMenuLabel>
             {isPlusUser ? (
-              <DropdownMenuItem
-                className="tw-flex tw-items-center tw-gap-1"
-                onSelect={() => {
-                  handleModeChange(ChainType.PROJECT_CHAIN);
-                }}
-              >
-                <LibraryBig className="tw-size-4" />
-                projects (alpha)
-              </DropdownMenuItem>
+              <>
+                <div className="tw-max-h-64 tw-overflow-y-auto">
+                  {(settings.projectList ?? []).map((project) => {
+                    const isCurrentProject =
+                      selectedChain === ChainType.PROJECT_CHAIN &&
+                      currentProject?.id === project.id;
+                    return (
+                      <DropdownMenuItem
+                        key={project.id}
+                        onSelect={() => handleProjectSelection(project)}
+                        className="tw-flex tw-items-center"
+                        aria-current={isCurrentProject ? "true" : undefined}
+                      >
+                        <LibraryBig className="tw-size-4 tw-text-muted" />
+                        <span className="tw-min-w-0 tw-flex-1 tw-truncate">{project.name}</span>
+                        {isCurrentProject && <CheckCircle className="tw-size-3.5 tw-text-accent" />}
+                      </DropdownMenuItem>
+                    );
+                  })}
+                </div>
+                <DropdownMenuItem onSelect={() => handleModeChange(ChainType.PROJECT_CHAIN)}>
+                  {(settings.projectList ?? []).length > 0 ? "Manage projects" : "Open projects"}
+                </DropdownMenuItem>
+              </>
             ) : (
               <DropdownMenuItem
                 onSelect={() => {
@@ -305,15 +347,16 @@ export function ChatControls({
                   onCloseProject?.();
                 }}
               >
-                copilot plus
-                <SquareArrowOutUpRight className="tw-size-3" />
+                <LibraryBig className="tw-size-4" />
+                Projects
+                <SquareArrowOutUpRight className="tw-ml-auto tw-size-3" />
               </DropdownMenuItem>
             )}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-      <div className="tw-flex tw-items-center tw-gap-1">
-        <div className="tw-mr-2">
+      <div className="tw-flex tw-shrink-0 tw-items-center tw-gap-0.5">
+        <div className="tw-mr-1 tw-hidden @[480px]/chat-header:tw-block">
           <TokenCounter usage={latestTokenUsage ?? null} />
         </div>
         <Tooltip>
@@ -368,7 +411,7 @@ export function ChatControls({
             >
               <div className="tw-flex tw-items-center tw-gap-2">
                 <Sparkles className="tw-size-4" />
-                Suggested Prompt
+                Suggested prompts
               </div>
               <SettingSwitch checked={settings.showSuggestedPrompts} />
             </DropdownMenuItem>
@@ -381,7 +424,7 @@ export function ChatControls({
             >
               <div className="tw-flex tw-items-center tw-gap-2">
                 <FileText className="tw-size-4" />
-                Relevant Note
+                Relevant notes
               </div>
               <SettingSwitch checked={settings.showRelevantNotes} />
             </DropdownMenuItem>
@@ -394,7 +437,7 @@ export function ChatControls({
             >
               <div className="tw-flex tw-items-center tw-gap-2">
                 <CheckCircle className="tw-size-4" />
-                Auto-accept Edits
+                Auto-accept edits
               </div>
               <SettingSwitch checked={settings.autoAcceptEdits} />
             </DropdownMenuItem>
@@ -405,14 +448,14 @@ export function ChatControls({
                   onSelect={() => reloadCurrentProject()}
                 >
                   <RefreshCw className="tw-size-4" />
-                  Reload Current Project
+                  Reload current project
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   className="tw-flex tw-items-center tw-gap-2"
                   onSelect={() => forceRebuildCurrentProjectContext()}
                 >
                   <AlertTriangle className="tw-size-4" />
-                  Force Rebuild Context
+                  Force rebuild context
                 </DropdownMenuItem>
               </>
             ) : (
@@ -422,7 +465,7 @@ export function ChatControls({
                   onSelect={() => refreshVaultIndex()}
                 >
                   <RefreshCw className="tw-size-4" />
-                  Refresh Vault Index
+                  Refresh vault index
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   className="tw-flex tw-items-center tw-gap-2"
@@ -431,13 +474,13 @@ export function ChatControls({
                       app,
                       () => forceReindexVault(),
                       "This will delete and rebuild your entire vault index from scratch. This operation cannot be undone. Are you sure you want to proceed?",
-                      "Force Reindex Vault"
+                      "Force reindex vault"
                     );
                     modal.open();
                   }}
                 >
                   <AlertTriangle className="tw-size-4" />
-                  Force Reindex Vault
+                  Force reindex vault
                 </DropdownMenuItem>
               </>
             )}

@@ -1,12 +1,8 @@
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import { ToolResultFormatter } from "@/tools/ToolResultFormatter";
-import { Check, ChevronRight, X } from "lucide-react";
+import { Check, ChevronRight, Loader2, X } from "lucide-react";
 import React, { useMemo, useState } from "react";
-
-// Animation constants
-// The shimmer keyframe is defined in the global CSS (see styles.css)
-const SHIMMER_ANIMATION = "shimmer 2s ease-in-out infinite";
 
 interface ToolCallBannerProps {
   toolName: string;
@@ -19,20 +15,14 @@ interface ToolCallBannerProps {
   onReject?: () => void;
 }
 
-/**
- * Produce a display-friendly tool result, falling back to raw strings when they are already concise.
- * @param toolName Name of the tool that produced the result
- * @param result Raw tool result string (possibly null if tool still running)
- * @returns Formatted result or null when there is nothing to show yet
- */
 const MAX_DISPLAY_CHARS = 5_000;
 
 /**
  * Produce a display-friendly tool result while guarding against oversized payloads.
  * Large strings are summarized instead of rendered to keep the UI responsive.
  * @param toolName Name of the tool that produced the result
- * @param result Raw tool result string (possibly null if tool still running)
- * @returns Formatted result or a guardrail message; null when there is nothing to show yet
+ * @param result Raw tool result string (possibly null if there is nothing to show yet)
+ * @returns Formatted result or a guardrail message; null when there is nothing to show
  */
 const formatToolResult = (toolName: string, result: string | null): string | null => {
   if (!result) {
@@ -59,6 +49,9 @@ const formatToolResult = (toolName: string, result: string | null): string | nul
   }
 };
 
+/**
+ * Render one concise, progressively disclosed step in an agent's activity trail.
+ */
 export const ToolCallBanner: React.FC<ToolCallBannerProps> = ({
   toolName,
   displayName,
@@ -72,12 +65,7 @@ export const ToolCallBanner: React.FC<ToolCallBannerProps> = ({
   const [isOpen, setIsOpen] = useState(false);
 
   const formattedResult = useMemo(() => formatToolResult(toolName, result), [toolName, result]);
-
-  // Defensive check: If we have a result, the tool is definitely done executing
-  // This prevents infinite rolling animation if marker update fails or is delayed
   const actuallyExecuting = isExecuting && !result;
-
-  // Don't allow expanding while executing
   const canExpand = !actuallyExecuting && formattedResult !== null;
 
   return (
@@ -86,50 +74,42 @@ export const ToolCallBanner: React.FC<ToolCallBannerProps> = ({
       onOpenChange={setIsOpen}
       disabled={!canExpand}
       aria-disabled={!canExpand}
-      className="tw-my-3 tw-w-full sm:tw-max-w-sm"
+      className="copilot-tool-call tw-my-1 tw-w-full"
     >
       <div
         className={cn(
-          "tw-rounded-md tw-border tw-border-border tw-bg-secondary/50",
-          actuallyExecuting && "tw-relative tw-overflow-hidden"
+          "copilot-tool-surface tw-rounded-md",
+          actuallyExecuting ? "tw-bg-secondary/50" : "tw-bg-transparent"
         )}
+        data-executing={actuallyExecuting}
       >
-        {/* Shimmer effect overlay */}
-        {actuallyExecuting && (
-          <div className="tw-absolute tw-inset-0 tw-z-[1] tw-overflow-hidden">
-            <div
-              className="tw-absolute tw-inset-0 -tw-translate-x-full"
-              style={{
-                background:
-                  "linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.3) 50%, transparent 100%)",
-                animation: SHIMMER_ANIMATION,
-              }}
-            />
-          </div>
-        )}
-
         <CollapsibleTrigger
           className={cn(
-            "tw-flex tw-w-full tw-items-center tw-justify-between tw-px-3 tw-py-2.5 tw-text-sm sm:tw-px-4 sm:tw-py-3",
-            canExpand && "hover:tw-bg-secondary/70",
+            "tw-flex tw-w-full tw-items-center tw-justify-between tw-gap-2 tw-rounded-md tw-p-2 tw-text-left tw-text-sm",
+            canExpand && "hover:tw-bg-secondary/60",
             !canExpand && "tw-cursor-default"
           )}
         >
-          <div className="tw-flex tw-items-center tw-gap-2">
-            <span className="tw-text-base">{emoji}</span>
-            <span className="tw-font-medium">
+          <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-2">
+            <span className="tw-flex tw-size-4 tw-shrink-0 tw-items-center tw-justify-center">
+              {actuallyExecuting ? (
+                <Loader2 className="tw-size-3.5 tw-animate-spin tw-text-accent" />
+              ) : (
+                <span aria-hidden="true">{emoji}</span>
+              )}
+            </span>
+            <span className="tw-truncate tw-font-medium">
               {toolName === "readNote"
                 ? `${actuallyExecuting ? "Reading" : "Read"} ${displayName}`
                 : `${actuallyExecuting ? "Calling" : "Called"} ${displayName}`}
-              {actuallyExecuting && toolName !== "readNote" && "..."}
+              {actuallyExecuting && toolName !== "readNote" && "…"}
             </span>
             {actuallyExecuting && confirmationMessage && (
-              <span className="tw-text-xs tw-text-muted">• {confirmationMessage}...</span>
+              <span className="tw-truncate tw-text-xs tw-text-muted">{confirmationMessage}…</span>
             )}
           </div>
 
-          <div className="tw-flex tw-items-center tw-gap-2">
-            {/* Future: Accept/Reject buttons */}
+          <div className="tw-flex tw-shrink-0 tw-items-center tw-gap-1">
             {!actuallyExecuting && onAccept && onReject && (
               <>
                 <button
@@ -158,7 +138,7 @@ export const ToolCallBanner: React.FC<ToolCallBannerProps> = ({
             {canExpand && (
               <ChevronRight
                 className={cn(
-                  "tw-size-4 tw-text-muted tw-transition-transform",
+                  "tw-size-3.5 tw-text-muted tw-transition-transform",
                   isOpen && "tw-rotate-90"
                 )}
               />
@@ -167,7 +147,7 @@ export const ToolCallBanner: React.FC<ToolCallBannerProps> = ({
         </CollapsibleTrigger>
 
         <CollapsibleContent>
-          <div className="tw-border-t tw-border-border tw-px-3 tw-py-2.5 sm:tw-px-4 sm:tw-py-3">
+          <div className="tw-mx-2 tw-border-l tw-border-border tw-pb-2 tw-pl-3 tw-pr-2">
             <div className="tw-text-sm tw-text-muted">
               <pre className="tw-overflow-x-auto tw-whitespace-pre-wrap tw-font-mono tw-text-xs">
                 {formattedResult ?? "No result available"}

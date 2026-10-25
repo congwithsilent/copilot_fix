@@ -1,4 +1,14 @@
-import { AlertCircle, CheckCircle, CircleDashed, FileText, Loader2, X } from "lucide-react";
+import {
+  AlertCircle,
+  AtSign,
+  CheckCircle,
+  ChevronDown,
+  ChevronUp,
+  CircleDashed,
+  FileText,
+  Loader2,
+  X,
+} from "lucide-react";
 import { Platform, TFile } from "obsidian";
 import React, { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -115,6 +125,7 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
   const contextStatus = useProjectContextStatus();
   const [indexingState] = useIndexingProgress();
   const [showTypeahead, setShowTypeahead] = useState(false);
+  const [showAllContext, setShowAllContext] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const isCopilotPlus = isPlusChain(currentChain);
 
@@ -159,14 +170,75 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
   const activeWebTabVisible =
     includeActiveWebTab && !hasAnySelection && Boolean(activeWebTab) && Platform.isDesktopApp;
 
-  const hasContext =
-    uniqueNotes.length > 0 ||
-    uniqueUrls.length > 0 ||
-    selectedTextContexts.length > 0 ||
-    contextFolders.length > 0 ||
-    uniqueWebTabs.length > 0 ||
-    activeNoteVisible ||
-    activeWebTabVisible;
+  const contextItems: React.ReactNode[] = [];
+
+  if (activeNoteVisible && currentActiveFile) {
+    contextItems.push(
+      <ContextActiveNoteBadge
+        key="active-note"
+        currentActiveFile={currentActiveFile}
+        onRemove={() => onRemoveContext("activeNote", "")}
+        onClick={() => handleBadgeClick(currentActiveFile)}
+      />
+    );
+  }
+  if (activeWebTabVisible && activeWebTab) {
+    contextItems.push(
+      <ContextActiveWebTabBadge
+        key="active-web-tab"
+        activeWebTab={activeWebTab}
+        onRemove={() => onRemoveContext("activeWebTab", "")}
+      />
+    );
+  }
+  uniqueNotes.forEach((note) => {
+    contextItems.push(
+      <ContextNoteBadge
+        key={`note:${note.path}`}
+        note={note}
+        onRemove={() => onRemoveContext("notes", note.path)}
+        onClick={() => handleBadgeClick(note)}
+      />
+    );
+  });
+  uniqueUrls.forEach((url) => {
+    contextItems.push(
+      <ContextUrlBadge key={`url:${url}`} url={url} onRemove={() => onRemoveContext("urls", url)} />
+    );
+  });
+  contextFolders.forEach((folder) => {
+    contextItems.push(
+      <ContextFolderBadge
+        key={`folder:${folder}`}
+        folder={folder}
+        onRemove={() => onRemoveContext("folders", folder)}
+      />
+    );
+  });
+  uniqueWebTabs.forEach((webTab) => {
+    contextItems.push(
+      <ContextWebTabBadge
+        key={`web:${webTab.url}`}
+        webTab={webTab}
+        onRemove={() => onRemoveContext("webTabs", webTab.url)}
+      />
+    );
+  });
+  selectedTextContexts.forEach((selectedText) => {
+    contextItems.push(
+      <ContextSelection
+        key={`selection:${selectedText.id}`}
+        selectedText={selectedText}
+        onRemoveContext={onRemoveContext}
+      />
+    );
+  });
+
+  const collapsedContextCount = 2;
+  const visibleContextItems = showAllContext
+    ? contextItems
+    : contextItems.slice(0, collapsedContextCount);
+  const hiddenContextCount = Math.max(0, contextItems.length - collapsedContextCount);
 
   // Get contextStatus from the shared hook
   const getContextStatusIcon = () => {
@@ -191,10 +263,11 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
               ref={buttonRef}
               variant="ghost2"
               size="fit"
-              className="tw-ml-1 tw-rounded-sm tw-text-muted hover:tw-bg-modifier-hover"
+              className="tw-h-6 tw-gap-1 tw-rounded-md tw-px-1.5 tw-text-muted hover:tw-bg-modifier-hover hover:tw-text-normal"
+              title="Add context"
             >
-              <span className="tw-text-base tw-font-medium tw-leading-none">@</span>
-              {!hasContext && <span className="tw-pr-1 tw-text-sm tw-leading-4">Add context</span>}
+              <AtSign className="tw-size-3.5" />
+              <span className="tw-text-xs">Context</span>
             </Button>
           </PopoverTrigger>
           <PopoverContent className="tw-w-[400px] tw-p-0" align="start" side="top" sideOffset={4}>
@@ -208,52 +281,30 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
           </PopoverContent>
         </Popover>
       </div>
-      <div className="tw-flex tw-flex-1 tw-flex-wrap tw-gap-1">
-        {activeNoteVisible && currentActiveFile && (
-          <ContextActiveNoteBadge
-            currentActiveFile={currentActiveFile}
-            onRemove={() => onRemoveContext("activeNote", "")}
-            onClick={() => handleBadgeClick(currentActiveFile)}
-          />
+
+      <div className="copilot-context-items tw-flex tw-min-w-0 tw-flex-1 tw-flex-wrap tw-items-center tw-gap-1">
+        {visibleContextItems}
+        {hiddenContextCount > 0 && (
+          <Button
+            variant="ghost2"
+            size="fit"
+            className="tw-h-6 tw-rounded-md tw-px-1.5 tw-text-xs tw-text-muted"
+            onClick={() => setShowAllContext((visible) => !visible)}
+            aria-expanded={showAllContext}
+          >
+            {showAllContext ? (
+              <>
+                <ChevronUp className="tw-size-3" />
+                Less
+              </>
+            ) : (
+              <>
+                <ChevronDown className="tw-size-3" />
+                {hiddenContextCount} more
+              </>
+            )}
+          </Button>
         )}
-        {activeWebTabVisible && activeWebTab && (
-          <ContextActiveWebTabBadge
-            activeWebTab={activeWebTab}
-            onRemove={() => onRemoveContext("activeWebTab", "")}
-          />
-        )}
-        {uniqueNotes.map((note) => (
-          <ContextNoteBadge
-            key={note.path}
-            note={note}
-            onRemove={() => onRemoveContext("notes", note.path)}
-            onClick={() => handleBadgeClick(note)}
-          />
-        ))}
-        {uniqueUrls.map((url) => (
-          <ContextUrlBadge key={url} url={url} onRemove={() => onRemoveContext("urls", url)} />
-        ))}
-        {contextFolders.map((folder) => (
-          <ContextFolderBadge
-            key={folder}
-            folder={folder}
-            onRemove={() => onRemoveContext("folders", folder)}
-          />
-        ))}
-        {uniqueWebTabs.map((webTab) => (
-          <ContextWebTabBadge
-            key={webTab.url}
-            webTab={webTab}
-            onRemove={() => onRemoveContext("webTabs", webTab.url)}
-          />
-        ))}
-        {selectedTextContexts.map((selectedText) => (
-          <ContextSelection
-            key={selectedText.id}
-            selectedText={selectedText}
-            onRemoveContext={onRemoveContext}
-          />
-        ))}
       </div>
 
       {currentChain === ChainType.PROJECT_CHAIN && (

@@ -266,7 +266,7 @@ export function ChatHistoryPopover({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>{children}</PopoverTrigger>
-      <PopoverContent className="tw-w-80 tw-p-0" align="end" side="top">
+      <PopoverContent className="tw-w-80 tw-p-0" align="end" side="bottom">
         <div className="tw-flex tw-max-h-[400px] tw-flex-col">
           <div className="tw-shrink-0 tw-bg-secondary-alt tw-p-1">
             <SearchBar value={searchQuery} onChange={setSearchQuery} />

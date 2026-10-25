@@ -22,7 +22,7 @@ import {
 import { useSettingsValue } from "@/settings/model";
 import { SelectedTextContext, WebTabContext } from "@/types/message";
 import { isAllowedFileForNoteContext } from "@/utils";
-import { CornerDownLeft, Image, Loader2, StopCircle, X } from "lucide-react";
+import { ArrowUp, Image, Loader2, StopCircle, X } from "lucide-react";
 import { App, Notice, TFile } from "obsidian";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { $getSelection, $isRangeSelection } from "lexical";
@@ -317,6 +317,8 @@ const ChatInput: React.FC<ChatInputProps> = ({
   };
 
   const onSendMessage = () => {
+    if (isProjectLoading) return;
+
     // Combine badge-only folders with the send-time Lexical snapshot of Folder pills.
     // This avoids React state synchronization races when the user sends quickly.
     const foldersFromEditor = getFoldersFromEditorSnapshot();
@@ -810,7 +812,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
 
   return (
     <div
-      className="tw-flex tw-w-full tw-flex-col tw-gap-0.5 tw-rounded-lg tw-bg-secondary-alt tw-px-1 tw-pb-1 tw-pt-2 tw-transition-colors tw-@container/chat-input focus-within:tw-bg-secondary"
+      className="copilot-composer tw-flex tw-w-full tw-flex-col tw-gap-1 tw-rounded-xl tw-bg-secondary-alt tw-p-1.5 tw-transition-colors tw-@container/chat-input focus-within:tw-bg-secondary"
       ref={containerRef}
     >
       {/* Hide context controls in edit mode - editing only changes text, not context */}
@@ -879,7 +881,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
           onEditorReady={onEditorReady}
           onImagePaste={onAddImage}
           onTagSelected={handleTagSelected}
-          placeholder={"Your AI assistant for Obsidian • @ to add context • / for custom prompts"}
+          placeholder={"Ask a question… @ for context, / for prompts"}
           disabled={isProjectLoading}
           isCopilotPlus={isCopilotPlus}
           currentActiveFile={currentActiveNote}
@@ -887,7 +889,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
         />
       </div>
 
-      <div className="tw-flex tw-h-6 tw-justify-between tw-gap-1 tw-px-1">
+      <div className="tw-flex tw-min-h-7 tw-items-center tw-justify-between tw-gap-1 tw-px-1">
         {isGenerating ? (
           <GeneratingIndicator isGenerating={isGenerating} loadingMessage={loadingMessage} />
         ) : (
@@ -964,13 +966,16 @@ const ChatInput: React.FC<ChatInputProps> = ({
                 </Button>
               )}
               <Button
-                variant="ghost2"
-                size="fit"
-                className="tw-text-muted"
+                variant="default"
+                size="sm"
+                className="copilot-send-button tw-h-7 tw-rounded-lg tw-px-2.5"
                 onClick={() => onSendMessage()}
+                disabled={isProjectLoading}
+                aria-label={editMode ? "Save edited message" : "Send message"}
+                title={editMode ? "Save edited message" : "Send message"}
               >
-                <CornerDownLeft className="!tw-size-3" />
-                <span>{editMode ? "save" : "chat"}</span>
+                <ArrowUp className="tw-size-3.5" />
+                <span>{editMode ? "Save" : "Send"}</span>
               </Button>
             </>
           )}

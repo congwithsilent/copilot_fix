@@ -4,13 +4,6 @@ import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { Button } from "@/components/ui/button";
 import { useChatInput } from "@/context/ChatInputContext";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { SearchBar } from "@/components/ui/SearchBar";
 import { cn } from "@/lib/utils";
@@ -72,7 +65,7 @@ function ProjectItem({
 }) {
   return (
     <div
-      className="tw-group tw-flex tw-cursor-pointer tw-items-center tw-justify-between tw-gap-2 tw-rounded-lg tw-border tw-border-solid tw-border-border tw-p-3 tw-transition-all tw-duration-200 tw-bg-secondary/40 hover:tw-border-interactive-accent hover:tw-text-accent hover:tw-shadow-[0_2px_12px_rgba(0,0,0,0.1)] active:tw-scale-[0.98]"
+      className="tw-group tw-flex tw-cursor-pointer tw-items-center tw-justify-between tw-gap-2 tw-rounded-lg tw-p-3 tw-transition-colors tw-bg-secondary/40 hover:tw-bg-secondary-alt"
       onClick={() => loadContext(project)}
     >
       <div className="tw-flex tw-flex-1 tw-items-center tw-gap-2 tw-overflow-hidden">
@@ -157,9 +150,9 @@ export const ProjectList = memo(
     onProjectAdded,
     onEditProject,
     hasMessages = false,
+    isChatVisible,
     showChatUI,
     onClose,
-    onProjectClose,
   }: {
     className?: string;
     projects: ProjectConfig[];
@@ -169,9 +162,9 @@ export const ProjectList = memo(
     onProjectAdded: (project: ProjectConfig) => void;
     onEditProject: (originP: ProjectConfig, updateP: ProjectConfig) => void;
     hasMessages?: boolean;
+    isChatVisible: boolean;
     showChatUI: (v: boolean) => void;
     onClose: () => void;
-    onProjectClose: () => void;
   }): React.ReactElement => {
     const [isOpen, setIsOpen] = useState(defaultOpen);
     const [showChatInput, setShowChatInput] = useState(false);
@@ -221,6 +214,16 @@ export const ProjectList = memo(
         projectUsageRevision,
       ]
     );
+
+    // Reset the browser's local selection whenever the parent returns to project management.
+    useEffect(() => {
+      if (!isChatVisible) {
+        setShowChatInput(false);
+        setSelectedProject(null);
+        setIsOpen(true);
+        setSearchQuery("");
+      }
+    }, [isChatVisible]);
 
     // Filter projects based on search query
     const filteredProjects = useMemo(() => {
@@ -293,75 +296,15 @@ export const ProjectList = memo(
       }, 0);
     };
 
+    if (isChatVisible) {
+      return <></>;
+    }
+
     return (
       <div className={cn("tw-flex tw-flex-col", className)}>
         <div className="tw-overflow-y-auto">
           <div className="tw-flex tw-flex-col">
-            {showChatInput && selectedProject ? (
-              <div className="tw-flex tw-items-center tw-justify-between tw-px-2 tw-py-3">
-                <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-2">
-                  <span className="tw-font-semibold tw-text-normal">Projects</span>
-                  <Select
-                    value={selectedProject.name}
-                    onValueChange={(value) => {
-                      const project = sortedProjects.find((p) => p.name === value);
-                      if (project) {
-                        handleLoadContext(project);
-                      }
-                    }}
-                  >
-                    <SelectTrigger className="tw-truncate">
-                      <SelectValue>
-                        <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-2">
-                          <Folder className="tw-size-4 tw-shrink-0 tw-text-accent/70" />
-                          <span className="tw-flex-1 tw-truncate">{selectedProject.name}</span>
-                        </div>
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent className="tw-truncate">
-                      {sortedProjects.map((project) => (
-                        <SelectItem
-                          key={project.name}
-                          value={project.name}
-                          className="tw-flex tw-items-center tw-gap-2"
-                        >
-                          <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-2">
-                            <Folder className="tw-size-4 tw-shrink-0" />
-                            <span className="tw-truncate">{project.name}</span>
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="tw-ml-1 tw-flex tw-items-center tw-gap-2">
-                  <Button
-                    variant="secondary"
-                    onClick={() => handleEditProject(selectedProject)}
-                    className="hover:tw-text-on-accent hover:tw-bg-accent/50"
-                  >
-                    <Edit2 className="tw-mr-1 tw-size-4" />
-                    Edit
-                  </Button>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="ghost2"
-                        size="icon"
-                        onClick={() => {
-                          enableOrDisableProject(false);
-                          onProjectClose();
-                        }}
-                        aria-label="Close Current Project"
-                      >
-                        <X className="tw-size-4" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent side="bottom">Close Current Project</TooltipContent>
-                  </Tooltip>
-                </div>
-              </div>
-            ) : (
+            {showChatInput && selectedProject ? null : (
               <Collapsible
                 open={isOpen}
                 onOpenChange={setIsOpen}

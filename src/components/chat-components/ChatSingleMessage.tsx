@@ -1236,17 +1236,19 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
   }
 
   return (
-    <div className="tw-my-1 tw-flex tw-w-full tw-flex-col">
+    <div
+      className={cn(
+        "tw-my-1 tw-flex tw-w-full tw-flex-col",
+        message.sender === USER_SENDER ? "copilot-message-user" : "copilot-message-ai"
+      )}
+    >
       <div
         className={cn(
           "tw-group tw-mx-2 tw-rounded-lg tw-p-2",
-          message.sender === USER_SENDER && "tw-bg-secondary-alt"
-        )}
-        style={
           message.sender === USER_SENDER
-            ? { backgroundColor: "var(--background-modifier-hover)" }
-            : undefined
-        }
+            ? "copilot-message-user-surface"
+            : "copilot-message-ai-surface"
+        )}
       >
         <div className="tw-flex tw-max-w-full tw-flex-col tw-gap-2 tw-overflow-hidden">
           {!isEditing && <MessageContext context={message.context} />}

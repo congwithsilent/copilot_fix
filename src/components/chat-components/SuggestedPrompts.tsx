@@ -1,7 +1,6 @@
 import { useChainType } from "@/aiParams";
 import { ChainType } from "@/chainFactory";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { VAULT_VECTOR_STORE_STRATEGY } from "@/constants";
 import { useSettingsValue } from "@/settings/model";
 import { PlusCircle, TriangleAlert } from "lucide-react";
@@ -97,58 +96,53 @@ export const SuggestedPrompts: React.FC<SuggestedPromptsProps> = ({ onClick }) =
   const indexVaultToVectorStore = settings.indexVaultToVectorStore as VAULT_VECTOR_STORE_STRATEGY;
 
   return (
-    <div className="tw-flex tw-flex-col tw-gap-4">
-      <Card className="tw-w-full tw-bg-transparent">
-        <CardHeader className="tw-px-2">
-          <CardTitle>Suggested Prompts</CardTitle>
-        </CardHeader>
-        <CardContent className="tw-p-2 tw-pt-0">
-          <div className="tw-flex tw-flex-col tw-gap-2">
-            {prompts.map((prompt, i) => (
-              <div
-                key={i}
-                className="tw-flex tw-justify-between tw-gap-2 tw-rounded-md tw-border tw-border-solid tw-border-border tw-p-2 tw-text-sm"
-              >
-                <div className="tw-flex tw-flex-col tw-gap-1">
-                  <div className="tw-text-muted">{prompt.title}</div>
-                  <div>{prompt.text}</div>
-                </div>
-                <div className="tw-flex tw-h-full tw-items-start">
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="ghost2"
-                        size="fit"
-                        className="tw-text-muted"
-                        onClick={() => onClick(prompt.text)}
-                      >
-                        <PlusCircle className="tw-size-4" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>Add to Chat</TooltipContent>
-                  </Tooltip>
-                </div>
+    <div className="tw-flex tw-flex-col tw-gap-3">
+      <section>
+        <h3 className="tw-mb-1 tw-mt-0 tw-px-1 tw-text-sm tw-font-medium tw-text-normal">
+          Suggested prompts
+        </h3>
+        <div className="tw-flex tw-flex-col">
+          {prompts.map((prompt, i) => (
+            <div
+              key={i}
+              className="copilot-prompt-row tw-flex tw-items-start tw-justify-between tw-gap-2 tw-rounded-md tw-p-2 tw-text-sm"
+            >
+              <div className="tw-flex tw-min-w-0 tw-flex-col tw-gap-1">
+                <div className="tw-text-xs tw-text-faint">{prompt.title}</div>
+                <div className="tw-leading-normal tw-text-muted">{prompt.text}</div>
               </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost2"
+                    size="icon"
+                    className="tw-shrink-0"
+                    onClick={() => onClick(prompt.text)}
+                    aria-label="Add prompt to chat"
+                  >
+                    <PlusCircle className="tw-size-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Add to chat</TooltipContent>
+              </Tooltip>
+            </div>
+          ))}
+        </div>
+      </section>
       {chainType === ChainType.VAULT_QA_CHAIN && (
-        <div className="tw-rounded-md tw-border tw-border-solid tw-border-border tw-p-2 tw-text-sm">
-          Please note that this is a retrieval-based QA. Questions should contain keywords and
-          concepts that exist literally in your vault
+        <div className="tw-rounded-md tw-bg-secondary-alt tw-p-3 tw-text-sm tw-leading-normal tw-text-muted">
+          Retrieval-based QA works best when your question contains keywords and concepts that exist
+          literally in your vault.
         </div>
       )}
       {chainType === ChainType.VAULT_QA_CHAIN &&
         indexVaultToVectorStore === VAULT_VECTOR_STORE_STRATEGY.NEVER && (
-          <div className="tw-rounded-md tw-border tw-border-solid tw-border-border tw-p-2 tw-text-sm">
-            <div>
-              <TriangleAlert className="tw-size-4" /> Your auto-index strategy is set to{" "}
-              <b>NEVER</b>. Before proceeding, click the{" "}
-              <span className="tw-text-accent">Refresh Index</span> button below or run the{" "}
-              <span className="tw-text-accent">Copilot command: Index (refresh) vault for QA</span>{" "}
-              to update the index.
-            </div>
+          <div className="tw-flex tw-items-start tw-gap-2 tw-rounded-md tw-bg-callout-warning/10 tw-p-3 tw-text-sm tw-text-muted">
+            <TriangleAlert className="tw-mt-0.5 tw-size-4 tw-shrink-0 tw-text-warning" />
+            <span>
+              Your auto-index strategy is <b>NEVER</b>. Refresh the index before asking questions,
+              or run <b>Copilot command: Index (refresh) vault for QA</b>.
+            </span>
           </div>
         )}
     </div>

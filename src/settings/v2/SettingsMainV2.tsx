@@ -19,12 +19,12 @@ type TabId = (typeof TAB_IDS)[number];
 
 // tab icons
 const icons: Record<TabId, JSX.Element> = {
-  basic: <Cog className="tw-size-5" />,
-  model: <Cpu className="tw-size-5" />,
-  QA: <Database className="tw-size-5" />,
-  command: <Command className="tw-size-5" />,
-  plus: <Sparkles className="tw-size-5" />,
-  advanced: <Wrench className="tw-size-5" />,
+  basic: <Cog className="tw-size-4" />,
+  model: <Cpu className="tw-size-4" />,
+  QA: <Database className="tw-size-4" />,
+  command: <Command className="tw-size-4" />,
+  plus: <Sparkles className="tw-size-4" />,
+  advanced: <Wrench className="tw-size-4" />,
 };
 
 // tab components
@@ -38,32 +38,80 @@ const components: Record<TabId, React.FC> = {
 };
 
 // tabs
+const labels: Record<TabId, string> = {
+  basic: "Basic",
+  model: "Model",
+  QA: "QA",
+  command: "Command",
+  plus: "Plus",
+  advanced: "Advanced",
+};
+
 const tabs: TabItemType[] = TAB_IDS.map((id) => ({
   id,
   icon: icons[id],
-  label: id.charAt(0).toUpperCase() + id.slice(1),
+  label: labels[id],
 }));
 
 const SettingsContent: React.FC = () => {
   const { selectedTab, setSelectedTab } = useTab();
+  const [isVertical, setIsVertical] = React.useState(false);
+
+  React.useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
+
+    const mediaQuery = window.matchMedia("(min-width: 760px)");
+    const updateOrientation = () => setIsVertical(mediaQuery.matches);
+    updateOrientation();
+    mediaQuery.addEventListener("change", updateOrientation);
+    return () => mediaQuery.removeEventListener("change", updateOrientation);
+  }, []);
+
+  /** Move the active tab and DOM focus together using the ARIA tabs keyboard pattern. */
+  const handleTabKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    const previousKey = isVertical ? "ArrowUp" : "ArrowLeft";
+    const nextKey = isVertical ? "ArrowDown" : "ArrowRight";
+    if (![previousKey, nextKey, "Home", "End"].includes(event.key)) return;
+
+    const buttons = Array.from(
+      event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]')
+    );
+    const currentIndex = buttons.indexOf(document.activeElement as HTMLButtonElement);
+    if (currentIndex < 0) return;
+
+    event.preventDefault();
+    const nextIndex =
+      event.key === "Home"
+        ? 0
+        : event.key === "End"
+          ? buttons.length - 1
+          : event.key === previousKey
+            ? (currentIndex - 1 + buttons.length) % buttons.length
+            : (currentIndex + 1) % buttons.length;
+
+    setSelectedTab(tabs[nextIndex].id);
+    buttons[nextIndex].focus();
+  };
 
   return (
-    <div className="tw-flex tw-flex-col">
-      <div className="tw-flex tw-flex-wrap tw-rounded-lg">
-        {tabs.map((tab, index) => (
+    <div className="copilot-settings-layout">
+      <div
+        className="copilot-settings-nav"
+        role="tablist"
+        aria-label="Copilot settings"
+        aria-orientation={isVertical ? "vertical" : "horizontal"}
+        onKeyDown={handleTabKeyDown}
+      >
+        {tabs.map((tab) => (
           <TabItem
             key={tab.id}
             tab={tab}
             isSelected={selectedTab === tab.id}
             onClick={() => setSelectedTab(tab.id)}
-            isFirst={index === 0}
-            isLast={index === tabs.length - 1}
           />
         ))}
       </div>
-      <div className="tw-h-px tw-w-full tw-bg-[var(--background-modifier-border)]" />
-
-      <div>
+      <div className="copilot-settings-content">
         {TAB_IDS.map((id) => {
           const Component = components[id];
           return (
@@ -101,7 +149,7 @@ const SettingsMainV2: React.FC<SettingsMainV2Props> = ({ plugin }) => {
         <div className="tw-flex tw-flex-col tw-gap-2">
           <h1 className="tw-flex tw-flex-col tw-gap-2 sm:tw-flex-row sm:tw-items-center sm:tw-justify-between">
             <div className="tw-flex tw-items-center tw-gap-2">
-              <span>Copilot Settings</span>
+              <span>Copilot settings</span>
               <div className="tw-flex tw-items-center tw-gap-1">
                 <span className="tw-text-xs tw-text-muted">v{plugin.manifest.version}</span>
                 {latestVersion && (
@@ -123,8 +171,8 @@ const SettingsMainV2: React.FC<SettingsMainV2Props> = ({ plugin }) => {
               </div>
             </div>
             <div className="tw-self-end sm:tw-self-auto">
-              <Button variant="secondary" size="sm" onClick={handleReset}>
-                Reset Settings
+              <Button variant="ghost2" size="sm" onClick={handleReset}>
+                Reset settings
               </Button>
             </div>
           </h1>

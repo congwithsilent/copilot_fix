@@ -22,6 +22,7 @@ jest.mock("lucide-react", () => ({
   Check: () => <div data-testid="check-icon">Check</div>,
   X: () => <div data-testid="x-icon">X</div>,
   ChevronRight: () => <div data-testid="chevron-icon">ChevronRight</div>,
+  Loader2: () => <div data-testid="loader-icon">Loader2</div>,
 }));
 
 // Mock the ToolResultFormatter
@@ -45,8 +46,10 @@ describe("ToolCallBanner", () => {
       );
 
       // Check for shimmer animation container
-      const shimmerOverlay = container.querySelector(".tw-absolute.tw-inset-0.tw-z-\\[1\\]");
-      expect(shimmerOverlay).not.toBeNull();
+      const executionState = container
+        .querySelector(".copilot-tool-surface")
+        ?.getAttribute("data-executing");
+      expect(executionState).toBe("true");
 
       // Check for "Calling" text
       expect(screen.getByText(/Calling Test Tool/)).toBeTruthy();
@@ -58,8 +61,10 @@ describe("ToolCallBanner", () => {
       );
 
       // Shimmer animation should NOT be present
-      const shimmerOverlay = container.querySelector(".tw-absolute.tw-inset-0.tw-z-\\[1\\]");
-      expect(shimmerOverlay).toBeNull();
+      const executionState = container
+        .querySelector(".copilot-tool-surface")
+        ?.getAttribute("data-executing");
+      expect(executionState).toBe("false");
 
       // Check for "Called" text (past tense)
       expect(screen.getByText(/Called Test Tool/)).toBeTruthy();
@@ -72,8 +77,10 @@ describe("ToolCallBanner", () => {
 
       // This is the key test: even though isExecuting=true, we have a result,
       // so the animation should NOT run (actuallyExecuting = false)
-      const shimmerOverlay = container.querySelector(".tw-absolute.tw-inset-0.tw-z-\\[1\\]");
-      expect(shimmerOverlay).toBeNull();
+      const executionState = container
+        .querySelector(".copilot-tool-surface")
+        ?.getAttribute("data-executing");
+      expect(executionState).toBe("false");
 
       // Should show "Called" since we have a result
       expect(screen.getByText(/Called Test Tool/)).toBeTruthy();
@@ -85,8 +92,10 @@ describe("ToolCallBanner", () => {
       );
 
       // Shimmer animation should NOT be present
-      const shimmerOverlay = container.querySelector(".tw-absolute.tw-inset-0.tw-z-\\[1\\]");
-      expect(shimmerOverlay).toBeNull();
+      const executionState = container
+        .querySelector(".copilot-tool-surface")
+        ?.getAttribute("data-executing");
+      expect(executionState).toBe("false");
 
       // Check for "Called" text
       expect(screen.getByText(/Called Test Tool/)).toBeTruthy();

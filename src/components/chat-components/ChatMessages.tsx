@@ -70,10 +70,21 @@ const ChatMessages = memo(
     }, [chatHistory]);
 
     if (visibleMessagesCount === 0 && !currentAiMessage) {
+      const activeFile = app.workspace.getActiveFile();
       return (
-        <div className="tw-flex tw-size-full tw-flex-col tw-gap-2 tw-overflow-y-auto">
+        <div className="copilot-empty-state tw-flex tw-size-full tw-flex-col tw-gap-4 tw-overflow-y-auto tw-p-3">
+          <div className="tw-flex tw-flex-col tw-gap-1 tw-px-1 tw-pt-2">
+            <h2 className="tw-m-0 tw-text-lg tw-font-semibold tw-text-normal">
+              Start a conversation
+            </h2>
+            <p className="tw-m-0 tw-text-sm tw-leading-normal tw-text-muted">
+              {activeFile
+                ? `Ask about “${activeFile.basename}”, or bring in other notes with @.`
+                : "Ask a question, or bring in notes and sources with @."}
+            </p>
+          </div>
           {showHelperComponents && settings.showRelevantNotes && (
-            <RelevantNotes defaultOpen={true} key="relevant-notes-before-chat" />
+            <RelevantNotes defaultOpen={false} key="relevant-notes-before-chat" />
           )}
           {showHelperComponents && settings.showSuggestedPrompts && (
             <SuggestedPrompts onClick={onReplaceChat} />

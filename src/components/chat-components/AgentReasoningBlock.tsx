@@ -146,7 +146,9 @@ export const AgentReasoningBlock: React.FC<AgentReasoningBlockProps> = ({
           </span>
 
           {/* Title and timer */}
-          <span className="agent-reasoning-title">{isActive ? "Reasoning" : "Thought for"}</span>
+          <span className="agent-reasoning-title">
+            {isActive ? "Agent working" : "Agent activity"}
+          </span>
           <span className="agent-reasoning-timer">{formatTime(elapsedSeconds)}</span>
         </div>
       </CollapsibleTrigger>

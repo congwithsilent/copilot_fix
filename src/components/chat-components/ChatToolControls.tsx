@@ -100,12 +100,14 @@ const ChatToolControls: React.FC<ChatToolControlsProps> = ({
                 variant="ghost2"
                 size="fit"
                 onClick={handleAutonomousAgentToggle}
+                aria-pressed={autonomousAgentToggle}
                 className={cn(
                   "tw-text-muted hover:tw-text-accent",
                   autonomousAgentToggle && "tw-text-accent tw-bg-accent/10"
                 )}
               >
                 <Brain className="tw-size-4" />
+                <span>Agent</span>
               </Button>
             </TooltipTrigger>
             <TooltipContent className="tw-px-1 tw-py-0.5">
@@ -123,6 +125,7 @@ const ChatToolControls: React.FC<ChatToolControlsProps> = ({
                   variant="ghost2"
                   size="fit"
                   onClick={handleVaultToggle}
+                  aria-pressed={vaultToggle}
                   className={cn(
                     "tw-text-muted hover:tw-text-accent",
                     vaultToggle && "tw-text-accent tw-bg-accent/10"
@@ -139,6 +142,7 @@ const ChatToolControls: React.FC<ChatToolControlsProps> = ({
                   variant="ghost2"
                   size="fit"
                   onClick={handleWebToggle}
+                  aria-pressed={webToggle}
                   className={cn(
                     "tw-text-muted hover:tw-text-accent",
                     webToggle && "tw-text-accent tw-bg-accent/10"
@@ -155,6 +159,7 @@ const ChatToolControls: React.FC<ChatToolControlsProps> = ({
                   variant="ghost2"
                   size="fit"
                   onClick={handleComposerToggle}
+                  aria-pressed={composerToggle}
                   className={cn(
                     "tw-text-muted hover:tw-text-accent",
                     composerToggle && "tw-text-accent tw-bg-accent/10"

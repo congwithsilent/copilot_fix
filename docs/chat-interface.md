@@ -9,19 +9,24 @@ The Copilot chat panel is the main way you interact with AI in Obsidian. This gu
 Copilot offers four modes. You can switch between them using the mode selector at the top of the chat panel.
 
 ### Chat
+
 General-purpose conversation. Good for writing, brainstorming, summarizing, or any task where you want to talk to an AI. Your currently open note and selected text are automatically included as context.
 
 ### Vault QA (Basic)
+
 Ask questions about your vault content. Copilot uses lexical search (keyword matching) to find relevant notes and passes them as context to the AI. No indexing required. Good for quick questions about your notes.
 
 ### Copilot Plus
+
 The most powerful mode. Requires a [Copilot Plus](copilot-plus-and-self-host.md) license. Combines Chat and Vault QA with an autonomous agent that can:
+
 - Search your vault and the web
 - Read and edit notes
 - Remember things across conversations
 - Use a growing set of tools automatically
 
 ### Projects (alpha)
+
 Focused workspaces with their own context, model, system prompt, and isolated chat history. Useful for keeping separate AI conversations per project. See [Projects](projects.md) for details.
 
 ---
@@ -45,6 +50,7 @@ Copilot adds the note's content to your message as context in the background. Th
 ### User Message Buttons
 
 Each message you send has action buttons that appear on hover:
+
 - **Edit** — Modify your prompt. Press Enter to re-send the edited message to the AI.
 - **Copy** — Copy the message text to clipboard
 - **Delete** — Remove this message from the conversation
@@ -52,6 +58,7 @@ Each message you send has action buttons that appear on hover:
 ### AI Message Buttons
 
 Each AI response has action buttons:
+
 - **Insert at cursor** — Insert the AI's response at your cursor position in the active note
 - **Replace at cursor** — Replace the selected text in your note with the AI's response
 - **Copy** — Copy the response to clipboard
@@ -77,6 +84,7 @@ The filename template controls how saved chats are named. The default is:
 ```
 
 Where:
+
 - `{$topic}` — An AI-generated title (or the first few words of your first message if AI titles are off)
 - `{$date}` — Date in YYYY-MM-DD format
 - `{$time}` — Time in HH-MM-SS format
@@ -90,6 +98,7 @@ When **Generate AI chat title on save** is enabled (default), Copilot asks the A
 ### Loading Previous Chats
 
 Click the **clock/history icon** in the chat panel toolbar to open the Chat History list. You can:
+
 - Browse previous conversations
 - Click a conversation to load it and continue from where you left off
 - Delete conversations you no longer need
@@ -110,7 +119,7 @@ Click the **gear icon** inside the chat panel to open per-session settings. Thes
 
 ## Token Counter
 
-Copilot shows a token count indicator at the bottom of the chat. This estimates how many tokens are being used by your current context. Useful for knowing when you're approaching context limits.
+Copilot shows a token count indicator in the top chat toolbar when usage data is available. It reports the total tokens used by the latest AI response, including prompt-cache usage when supplied by the provider.
 
 ---
 
@@ -136,13 +145,14 @@ Enable in **Settings → Copilot → Basic → Relevant Notes** (on by default).
 
 ## Saving a Chat Manually
 
-If autosave is off, or you want to save mid-conversation, click the **Save Chat as Note** button above the chat input box. This saves the current conversation to your configured save folder.
+If autosave is off, or you want to save mid-conversation, click the **Save Chat as Note** button in the top chat toolbar. This saves the current conversation to your configured save folder.
 
 ---
 
 ## New Chat Behavior
 
-Click the **pencil/new chat icon** to start a fresh conversation. This:
+Click the **new chat icon** in the top chat toolbar to start a fresh conversation. This:
+
 1. Saves the current conversation (if autosave is enabled)
 2. Clears the chat window
 3. Resets the context to your currently active note

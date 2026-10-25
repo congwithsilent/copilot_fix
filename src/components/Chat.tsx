@@ -922,9 +922,33 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
   // message persistence and loading automatically based on project context
 
   const renderChatComponents = () => (
-    <>
-      <div className="tw-flex tw-size-full tw-flex-col tw-overflow-hidden">
-        <NewVersionBanner currentVersion={plugin.manifest.version} />
+    <div className="tw-flex tw-size-full tw-flex-col tw-overflow-hidden">
+      <NewVersionBanner currentVersion={plugin.manifest.version} />
+      <ChatControls
+        onNewChat={handleNewChat}
+        onSaveAsNote={() => handleSaveAsNote()}
+        onLoadHistory={handleLoadChatHistory}
+        onModeChange={(newMode) => {
+          if (newMode === ChainType.PROJECT_CHAIN) {
+            if (selectedChain !== ChainType.PROJECT_CHAIN) {
+              setPreviousMode(selectedChain);
+            }
+            setShowChatUI(false);
+          }
+        }}
+        onProjectSelected={() => {
+          setProgressCardVisible(null);
+          setShowChatUI(true);
+        }}
+        chatHistory={chatHistoryItems}
+        onUpdateChatTitle={handleUpdateChatTitle}
+        onDeleteChat={handleDeleteChat}
+        onLoadChat={handleLoadChat}
+        onOpenSourceFile={handleOpenSourceFile}
+        latestTokenUsage={latestTokenUsage}
+      />
+
+      <div className="copilot-chat-column tw-flex tw-min-h-0 tw-flex-1 tw-flex-col">
         <ChatMessages
           chatHistory={chatHistory}
           currentAiMessage={currentAiMessage}
@@ -938,89 +962,59 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
           onReplaceChat={setInputMessage}
           showHelperComponents={selectedChain !== ChainType.PROJECT_CHAIN}
         />
-        {shouldShowProgressCard() ? (
-          <div className="tw-inset-0 tw-z-modal tw-flex tw-items-center tw-justify-center tw-rounded-xl">
-            <ProgressCard
-              plugin={plugin}
-              setHiddenCard={() => {
-                setProgressCardVisible(false);
-              }}
-              onEditContext={() => {
-                const currentProject = getCurrentProject();
-                if (currentProject) {
-                  // Open the context management modal for editing the project
-                  new ContextManageModal(
-                    app,
-                    (updatedProject) => {
-                      handleEditProject(currentProject, updatedProject);
-                    },
-                    currentProject
-                  ).open();
-                }
-              }}
-            />
-          </div>
-        ) : shouldShowIndexingCard() ? (
-          <div className="tw-inset-0 tw-z-modal tw-flex tw-items-center tw-justify-center tw-rounded-xl">
-            <IndexingProgressCard
-              onClose={handleIndexingCardClose}
-              onPause={handleIndexingPause}
-              onResume={handleIndexingResume}
-              onStop={handleIndexingStop}
-            />
-          </div>
-        ) : (
-          <>
-            <ChatControls
-              onNewChat={handleNewChat}
-              onSaveAsNote={() => handleSaveAsNote()}
-              onLoadHistory={handleLoadChatHistory}
-              onModeChange={(newMode) => {
-                setPreviousMode(selectedChain);
-                // Hide chat UI when switching to project mode
-                if (newMode === ChainType.PROJECT_CHAIN) {
-                  setShowChatUI(false);
-                }
-              }}
-              chatHistory={chatHistoryItems}
-              onUpdateChatTitle={handleUpdateChatTitle}
-              onDeleteChat={handleDeleteChat}
-              onLoadChat={handleLoadChat}
-              onOpenSourceFile={handleOpenSourceFile}
-              latestTokenUsage={latestTokenUsage}
-            />
-            <ChatInput
-              inputMessage={inputMessage}
-              setInputMessage={setInputMessage}
-              handleSendMessage={handleSendMessage}
-              isGenerating={loading}
-              loadingMessage={loadingMessage}
-              onStopGenerating={() => handleStopGenerating(ABORT_REASON.USER_STOPPED)}
-              app={app}
-              contextNotes={contextNotes}
-              setContextNotes={setContextNotes}
-              includeActiveNote={includeActiveNote}
-              setIncludeActiveNote={setIncludeActiveNote}
-              includeActiveWebTab={includeActiveWebTab}
-              setIncludeActiveWebTab={setIncludeActiveWebTab}
-              activeWebTab={currentActiveWebTab}
-              selectedImages={selectedImages}
-              onAddImage={(files: File[]) => setSelectedImages((prev) => [...prev, ...files])}
-              setSelectedImages={setSelectedImages}
-              disableModelSwitch={selectedChain === ChainType.PROJECT_CHAIN}
-              selectedTextContexts={selectedTextContexts}
-              onRemoveSelectedText={handleRemoveSelectedText}
-              showProgressCard={() => {
-                setProgressCardVisible(true);
-              }}
-              showIndexingCard={() => {
-                setIndexingCardVisible(true);
-              }}
-            />
-          </>
-        )}
       </div>
-    </>
+
+      <div className="copilot-chat-column tw-shrink-0 tw-px-2 tw-pb-2">
+        {shouldShowProgressCard() && (
+          <ProgressCard
+            plugin={plugin}
+            setHiddenCard={() => setProgressCardVisible(false)}
+            onEditContext={() => {
+              const currentProject = getCurrentProject();
+              if (currentProject) {
+                new ContextManageModal(
+                  app,
+                  (updatedProject) => handleEditProject(currentProject, updatedProject),
+                  currentProject
+                ).open();
+              }
+            }}
+          />
+        )}
+        {shouldShowIndexingCard() && (
+          <IndexingProgressCard
+            onClose={handleIndexingCardClose}
+            onPause={handleIndexingPause}
+            onResume={handleIndexingResume}
+            onStop={handleIndexingStop}
+          />
+        )}
+        <ChatInput
+          inputMessage={inputMessage}
+          setInputMessage={setInputMessage}
+          handleSendMessage={handleSendMessage}
+          isGenerating={loading}
+          loadingMessage={loadingMessage}
+          onStopGenerating={() => handleStopGenerating(ABORT_REASON.USER_STOPPED)}
+          app={app}
+          contextNotes={contextNotes}
+          setContextNotes={setContextNotes}
+          includeActiveNote={includeActiveNote}
+          setIncludeActiveNote={setIncludeActiveNote}
+          includeActiveWebTab={includeActiveWebTab}
+          setIncludeActiveWebTab={setIncludeActiveWebTab}
+          activeWebTab={currentActiveWebTab}
+          selectedImages={selectedImages}
+          onAddImage={(files: File[]) => setSelectedImages((prev) => [...prev, ...files])}
+          setSelectedImages={setSelectedImages}
+          disableModelSwitch={selectedChain === ChainType.PROJECT_CHAIN}
+          selectedTextContexts={selectedTextContexts}
+          onRemoveSelectedText={handleRemoveSelectedText}
+          showProgressCard={() => setProgressCardVisible(true)}
+          showIndexingCard={() => setIndexingCardVisible(true)}
+        />
+      </div>
+    </div>
   );
 
   return (
@@ -1057,10 +1051,8 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
                     );
                   }
                 }}
+                isChatVisible={showChatUI}
                 showChatUI={(v) => setShowChatUI(v)}
-                onProjectClose={() => {
-                  setProgressCardVisible(null);
-                }}
               />
             </div>
           )}

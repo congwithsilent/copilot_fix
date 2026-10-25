@@ -78,14 +78,15 @@ URL processing requires Copilot Plus. YouTube URLs are handled specially — Cop
 
 These special @-mentions explicitly trigger tools in Copilot Plus mode:
 
-| Mention | What it does |
-|---|---|
-| `@vault` | Search your vault notes for relevant information |
-| `@websearch` or `@web` | Search the internet |
-| `@composer` | Create or edit a note |
-| `@memory` | Access or update your memory |
+| Mention                | What it does                                     |
+| ---------------------- | ------------------------------------------------ |
+| `@vault`               | Search your vault notes for relevant information |
+| `@websearch` or `@web` | Search the internet                              |
+| `@composer`            | Create or edit a note                            |
+| `@memory`              | Access or update your memory                     |
 
 Example:
+
 ```
 @vault what did I write about machine learning last month?
 @websearch what are the latest changes to the Python packaging ecosystem?
@@ -109,7 +110,7 @@ Works similarly but captures selected text from the Web Viewer. Available on des
 
 ### Adding a PDF as Context (Copilot Plus)
 
-Click the **+ Add context** button above the chat input to attach a PDF file. The PDF is converted to text and included as context for your message.
+Click the **Context** button above the chat input to attach a PDF file. The PDF is converted to text and included as context for your message.
 
 ### Adding an Image as Context
 
@@ -119,22 +120,22 @@ Drag an image directly into the chat input box, or click the **image button** in
 
 ## Context Indicators
 
-When context items are added to your message, Copilot shows small pills or badges in the chat input area showing what's included (e.g., the note name, a URL, a tag). This helps you confirm exactly what the AI will see.
+When context items are added to your message, Copilot shows small pills or badges in the context tray above the chat input. This helps you confirm exactly what the AI will see. The first two items remain visible; select **more** to expand the rest, then **Less** to collapse them again.
 
 ---
 
 ## Context Behavior by Mode
 
-| Context Type | Chat | Vault QA | Copilot Plus |
-|---|---|---|---|
-| Active note | Yes (auto) | Yes (auto) | Yes (auto) |
-| Selected text | Yes (auto) | Yes (auto) | Yes (auto) |
-| @note / @folder | Yes | Yes | Yes |
-| @URL processing | Copilot Plus only | Copilot Plus only | Yes |
-| @vault search | Yes (explicit) | Auto | Auto |
-| @websearch | No | No | Yes |
-| Images (vision) | Yes | Yes | Yes |
-| Active web tab | Desktop only | Desktop only | Desktop only |
+| Context Type    | Chat              | Vault QA          | Copilot Plus |
+| --------------- | ----------------- | ----------------- | ------------ |
+| Active note     | Yes (auto)        | Yes (auto)        | Yes (auto)   |
+| Selected text   | Yes (auto)        | Yes (auto)        | Yes (auto)   |
+| @note / @folder | Yes               | Yes               | Yes          |
+| @URL processing | Copilot Plus only | Copilot Plus only | Yes          |
+| @vault search   | Yes (explicit)    | Auto              | Auto         |
+| @websearch      | No                | No                | Yes          |
+| Images (vision) | Yes               | Yes               | Yes          |
+| Active web tab  | Desktop only      | Desktop only      | Desktop only |
 
 ---
 
