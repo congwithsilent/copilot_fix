@@ -3,6 +3,7 @@ import { CHUNK_SIZE } from "@/constants";
 import { App, TFile } from "obsidian";
 import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
 import { MemoryManager } from "./utils/MemoryManager";
+import { extractNotePathFromChunkId } from "./utils/chunkIdUtils";
 
 /**
  * Chunk interface for unified search system
@@ -181,7 +182,7 @@ export class ChunkManager {
    * Ensure chunk exists in cache with automatic validation and regeneration
    */
   private async ensureChunkExists(id: string): Promise<Chunk | null> {
-    const [notePath] = id.split("#");
+    const notePath = extractNotePathFromChunkId(id);
     const chunks = await this.getValidatedChunks(notePath);
 
     const chunk = chunks.find((c) => c.id === id);
@@ -235,7 +236,7 @@ export class ChunkManager {
    * @deprecated Use async getChunkText() instead for proper cache validation
    */
   getChunkTextSync(id: string): string {
-    const [notePath] = id.split("#");
+    const notePath = extractNotePathFromChunkId(id);
 
     // Search all cache entries for this notePath (regardless of options used)
     // This maintains backward compatibility for the deprecated sync method

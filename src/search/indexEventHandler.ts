@@ -14,6 +14,7 @@ export class IndexEventHandler {
   private lastActiveFile: TFile | null = null;
   private lastActiveFileMtime: number | null = null;
   private listenersActive = false;
+  private settingsUnsubscribe: (() => void) | null = null;
 
   constructor(
     private app: App,
@@ -21,7 +22,10 @@ export class IndexEventHandler {
     private indexBackend: SemanticIndexBackend
   ) {
     this.syncEventListeners();
-    subscribeToSettingsChange(() => {
+    // Keep the unsubscribe handle: a handler replaced on backend switch must
+    // stop reacting to settings changes, or it re-registers its event
+    // listeners alongside the new handler and reindexes every file twice.
+    this.settingsUnsubscribe = subscribeToSettingsChange(() => {
       this.syncEventListeners();
     });
   }
@@ -150,9 +154,19 @@ export class IndexEventHandler {
 
   public cleanup() {
     this.teardownEventListeners();
+    this.disposeSubscription();
   }
 
   public unload() {
     this.teardownEventListeners();
+    this.disposeSubscription();
+  }
+
+  /**
+   * Detach from settings changes so a replaced handler becomes inert.
+   */
+  private disposeSubscription(): void {
+    this.settingsUnsubscribe?.();
+    this.settingsUnsubscribe = null;
   }
 }

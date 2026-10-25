@@ -186,6 +186,11 @@ export interface CustomModel {
   // Thinking configuration (e.g. Ark / OpenAI compatible endpoints)
   disableThinking?: boolean;
   thinking?: { type: string; [key: string]: any };
+
+  // OpenRouter prompt caching. "auto" detects Claude vs OpenAI from the model id.
+  promptCacheStrategy?: "auto" | "anthropic" | "openai" | "off";
+  /** Anthropic cache TTL. Defaults to "5m". */
+  promptCacheTtl?: "5m" | "1h";
 }
 
 export function setModelKey(modelKey: string) {

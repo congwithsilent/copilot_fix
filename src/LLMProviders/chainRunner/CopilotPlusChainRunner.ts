@@ -8,6 +8,7 @@ import {
 } from "@/constants";
 import { LayerToMessagesConverter } from "@/context/LayerToMessagesConverter";
 import {
+  FileContent,
   ImageBatchProcessor,
   ImageContent,
   ImageProcessingResult,
@@ -16,7 +17,9 @@ import {
 import { logInfo, logWarn } from "@/logger";
 import { checkIsPlusUser } from "@/plusUtils";
 import { getSettings } from "@/settings/model";
-import { getSystemPromptWithMemory } from "@/system-prompts/systemPromptBuilder";
+import { getStableSystemPrompt } from "@/system-prompts/systemPromptBuilder";
+import { appendVolatileMemory } from "@/memory/memoryPromptUtils";
+import { logPromptCacheDebug } from "./utils/promptCacheDebug";
 import { writeFileTool } from "@/tools/ComposerTools";
 import { ToolManager } from "@/tools/toolManager";
 import { ToolResultFormatter } from "@/tools/ToolResultFormatter";
@@ -518,10 +521,18 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
 
     // Process existing chat content images if present
     const existingContent = userMessage.content;
+    // Non-image multimodal parts (e.g. PDFs attached as `file`) are not images:
+    // the image processor would drop them, so carry them through unchanged.
+    const fileParts: FileContent[] = [];
     if (existingContent && existingContent.length > 0) {
       const result = await this.processChatInputImages(existingContent);
       successfulImages.push(...result.successfulImages);
       failureMessages.push(...result.failureDescriptions);
+      for (const item of existingContent) {
+        if (item?.type === "file") {
+          fileParts.push(item as FileContent);
+        }
+      }
     }
 
     // Let the LLM know about the image processing failures
@@ -531,6 +542,9 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
     }
 
     const messageContent: MessageContent[] = [
+      // Document parts go first: OpenAI-compatible gateways (including Ark)
+      // expect them ahead of the text part.
+      ...fileParts,
       {
         type: "text",
         text: finalText,
@@ -676,6 +690,12 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
         }
       }
 
+      // Volatile memory goes at the very end of the current turn. Keeping it
+      // out of the system prompt and history is what makes the cached prefix
+      // stable across turns.
+      const volatileMemory = await this.chainManager.userMemoryManager.getVolatileMemoryPrompt();
+      finalUserContent = appendVolatileMemory(finalUserContent, volatileMemory);
+
       // Build message content with text and images for multimodal models
       const content: string | MessageContent[] = isMultimodalCurrent
         ? await this.buildMessageContent(finalUserContent, userMessage)
@@ -691,6 +711,7 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
 
     // Record the payload for debugging (includes layered view if envelope available)
     const modelName = (chatModel as { modelName?: string } | undefined)?.modelName;
+    logPromptCacheDebug(messages, modelName);
     recordPromptPayload({
       messages,
       modelName,
@@ -703,7 +724,8 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
     const chatStream = await withSuppressedTokenWarnings(() =>
       this.chainManager.chatModelManager.getChatModel().stream(messages, {
         signal: abortController.signal,
-      })
+        session_id: userMessage.cacheSessionId,
+      } as any)
     );
 
     for await (const chunk of chatStream) {
@@ -1194,7 +1216,9 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
   }
 
   protected async getSystemPrompt(): Promise<string> {
-    return getSystemPromptWithMemory(this.chainManager.userMemoryManager);
+    const stablePrompt = getStableSystemPrompt();
+    const savedMemories = await this.chainManager.userMemoryManager.getSavedMemoriesPrompt();
+    return savedMemories ? `${stablePrompt}\n\n${savedMemories}` : stablePrompt;
   }
 
   /**

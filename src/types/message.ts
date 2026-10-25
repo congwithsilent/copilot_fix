@@ -92,6 +92,12 @@ export interface TokenUsage {
   inputTokens?: number;
   outputTokens?: number;
   totalTokens?: number;
+  /** Input tokens served from a provider prompt cache (OpenAI/Anthropic). */
+  cachedInputTokens?: number;
+  /** Input tokens written to a provider prompt cache on this request. */
+  cacheWriteTokens?: number;
+  /** Provider-reported cache discount (OpenRouter), if any. */
+  cacheDiscount?: number;
 }
 
 /**
@@ -154,6 +160,12 @@ export interface ChatMessage {
 
   /** Layered prompt context envelope */
   contextEnvelope?: PromptContextEnvelope;
+
+  /**
+   * Stable per-conversation key used for provider prompt-cache locality
+   * (OpenRouter `session_id` / `prompt_cache_key`).
+   */
+  cacheSessionId?: string;
 
   /** Whether this is an error message */
   isErrorMessage?: boolean;

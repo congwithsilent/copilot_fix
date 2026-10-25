@@ -247,6 +247,7 @@ export default class VectorStoreManager {
 
     this.activeBackendKey = nextBackendKey;
     this.indexBackend = nextBackendKey === "miyo" ? this.miyoBackend : this.oramaBackend;
+    this.indexOps.dispose();
     this.indexOps = new IndexOperations(app, this.indexBackend, this.embeddingsManager);
     this.eventHandler.cleanup();
     this.eventHandler = new IndexEventHandler(app, this.indexOps, this.indexBackend);
@@ -273,6 +274,7 @@ export default class VectorStoreManager {
 
   public onunload(): void {
     this.eventHandler.cleanup();
+    this.indexOps.dispose();
     this.indexBackend.onunload();
   }
 

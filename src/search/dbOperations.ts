@@ -183,14 +183,15 @@ export class DBOperations {
       throw new CustomError("Semantic index database not found.");
     }
     try {
-      const searchResult = await search(this.oramaDb, {
-        term: filePath,
-        properties: ["path"],
-      });
-      if (searchResult.hits.length > 0) {
+      // Match the path exactly. A full-text query tokenizes the path, so a
+      // search for "Folder/My Note.md" also matches unrelated files such as
+      // "Folder/My Note (1).md" (and CJK-only paths degrade to just "md",
+      // matching every note) - deleting up to `limit` wrong documents.
+      const matches = await DBOperations.getDocsByPath(this.oramaDb, filePath);
+      if (matches && matches.length > 0) {
         await removeMultiple(
           this.oramaDb,
-          searchResult.hits.map((hit) => hit.id),
+          matches.map((match) => match.document.id),
           500
         );
         if (getSettings().debug) {

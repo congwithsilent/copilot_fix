@@ -50,7 +50,15 @@ export class ChatPersistenceManager {
   /**
    * Save current chat history to a markdown file
    */
-  async saveChat(modelKey: string): Promise<void> {
+  /**
+   * Save the current chat as a note.
+   *
+   * @param modelKey Active model key recorded in frontmatter.
+   * @param project Project the loaded messages belong to. Pass it explicitly
+   * during a project switch: the settings atom already points at the incoming
+   * project while this repository still holds the outgoing conversation.
+   */
+  async saveChat(modelKey: string, project?: ProjectConfig | null): Promise<void> {
     try {
       const messages = this.messageRepo.getDisplayMessages();
       if (messages.length === 0) {
@@ -87,7 +95,7 @@ export class ChatPersistenceManager {
         }
       }
 
-      const currentProject = getCurrentProject();
+      const currentProject = project === undefined ? getCurrentProject() : project;
 
       const preferredFileName = existingFile
         ? existingFile.path
@@ -98,7 +106,8 @@ export class ChatPersistenceManager {
         firstMessageEpoch,
         modelKey,
         existingTopic,
-        existingLastAccessedAt
+        existingLastAccessedAt,
+        currentProject
       );
       let targetFile: TFile | null = existingFile;
 
@@ -719,10 +728,11 @@ ${conversationSummary}`;
     firstMessageEpoch: number,
     modelKey: string,
     topic?: string,
-    lastAccessedAt?: number
+    lastAccessedAt?: number,
+    project?: ProjectConfig | null
   ): string {
     const settings = getSettings();
-    const currentProject = getCurrentProject();
+    const currentProject = project === undefined ? getCurrentProject() : project;
 
     return `---
 epoch: ${firstMessageEpoch}

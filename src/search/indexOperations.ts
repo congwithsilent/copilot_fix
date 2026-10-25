@@ -33,6 +33,7 @@ export class IndexOperations {
   private checkpointInterval: number;
   private embeddingBatchSize: number;
   private chunkManager: ChunkManager;
+  private settingsUnsubscribe: (() => void) | null = null;
   private state: IndexingState = {
     isIndexingPaused: false,
     isIndexingCancelled: false,
@@ -49,10 +50,19 @@ export class IndexOperations {
     this.refreshRuntimeIndexingConfig();
     this.chunkManager = getSharedChunkManager(app);
 
-    // Subscribe to settings changes
-    subscribeToSettingsChange(async () => {
+    // Subscribe to settings changes. The handle is kept so a replaced
+    // instance (backend switch) can detach instead of leaking.
+    this.settingsUnsubscribe = subscribeToSettingsChange(async () => {
       this.refreshRuntimeIndexingConfig();
     });
+  }
+
+  /**
+   * Detach from settings changes. Called when this instance is replaced.
+   */
+  public dispose(): void {
+    this.settingsUnsubscribe?.();
+    this.settingsUnsubscribe = null;
   }
 
   /**
@@ -120,7 +130,17 @@ export class IndexOperations {
         await this.indexBackend.garbageCollect();
       }
 
-      const files = await this.getFilesToIndex(overwrite);
+      const { files, pathsToClear } = await this.getFilesToIndex(overwrite);
+
+      // Document ids are content hashes, so re-indexing an edited or emptied
+      // file inserts new chunks and leaves the old ones behind. Drop the
+      // previous chunks first. An overwrite run already cleared the whole index.
+      if (!overwrite) {
+        for (const path of pathsToClear) {
+          await this.indexBackend.removeByPath(path);
+        }
+      }
+
       if (files.length === 0) {
         // For user-initiated actions, briefly show "Index Up to Date"
         if (options?.userInitiated) {
@@ -380,15 +400,28 @@ export class IndexOperations {
     return MD5(sourceDocument).toString();
   }
 
-  private async getFilesToIndex(overwrite?: boolean): Promise<TFile[]> {
+  /**
+   * Collect the files that need (re)indexing.
+   *
+   * @param overwrite When true, every eligible file is returned and no paths
+   * are reported for clearing (the index is wiped before indexing).
+   * @returns The files to index plus the paths whose existing chunks must be
+   * removed first (edited, previously partially indexed, or emptied files).
+   */
+  private async getFilesToIndex(
+    overwrite?: boolean
+  ): Promise<{ files: TFile[]; pathsToClear: string[] }> {
     const { inclusions, exclusions } = getMatchingPatterns();
     const allMarkdownFiles = this.app.vault.getMarkdownFiles();
 
     // If overwrite is true, return all markdown files that match current filters
     if (overwrite) {
-      return allMarkdownFiles.filter((file) => {
-        return shouldIndexFile(file, inclusions, exclusions);
-      });
+      return {
+        files: allMarkdownFiles.filter((file) => {
+          return shouldIndexFile(file, inclusions, exclusions);
+        }),
+        pathsToClear: [],
+      };
     }
 
     // Get currently indexed files and latest mtime
@@ -399,24 +432,33 @@ export class IndexOperations {
     // Get all markdown files that should be indexed under current rules
     const filesToIndex = new Set<TFile>();
     const emptyFiles = new Set<string>();
+    const pathsToClear = new Set<string>();
 
     for (const file of allMarkdownFiles) {
       if (!shouldIndexFile(file, inclusions, exclusions)) {
         continue;
       }
 
+      const isIndexed = indexedFilePaths.has(file.path);
+
       // Check actual content
       const content = await this.app.vault.cachedRead(file);
       if (!content || content.trim().length === 0) {
         emptyFiles.add(file.path);
+        // An emptied note produces no chunks; its old chunks must still go.
+        if (isIndexed) {
+          pathsToClear.add(file.path);
+        }
         continue;
       }
 
-      const isIndexed = indexedFilePaths.has(file.path);
       const needsEmbeddings = filesMissingEmbeddings.has(file.path);
 
       if (!isIndexed || needsEmbeddings || file.stat.mtime > latestMtime) {
         filesToIndex.add(file);
+        if (isIndexed) {
+          pathsToClear.add(file.path);
+        }
       }
     }
 
@@ -429,7 +471,7 @@ export class IndexOperations {
       ].join("\n")
     );
 
-    return Array.from(filesToIndex);
+    return { files: Array.from(filesToIndex), pathsToClear: Array.from(pathsToClear) };
   }
 
   private initializeIndexingState(totalFiles: number) {
@@ -469,7 +511,7 @@ export class IndexOperations {
       // After we exit the pause loop (meaning we've resumed), re-evaluate files
       if (!this.state.isIndexingCancelled) {
         this.refreshRuntimeIndexingConfig();
-        const files = await this.getFilesToIndex();
+        const { files } = await this.getFilesToIndex();
         if (files.length === 0) {
           logInfo("No files to index after filter change, stopping indexing");
           this.cancelIndexing();

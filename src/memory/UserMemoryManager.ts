@@ -115,36 +115,92 @@ export class UserMemoryManager {
   }
 
   /**
-   * Get user memory prompt
+   * Build the long-lived saved-memories block.
+   *
+   * This block changes only when the user (or the agent on their behalf) saves
+   * a new memory, so it belongs in the stable system prompt where prompt
+   * caching can reuse it.
+   *
+   * @returns The formatted block, or null when disabled/empty.
+   */
+  private buildSavedMemoriesPrompt(): string | null {
+    const settings = getSettings();
+    if (!settings.enableSavedMemory || !this.savedMemoriesContent) {
+      return null;
+    }
+
+    return `<saved_memories>
+        ${this.savedMemoriesContent}
+        </saved_memories>
+
+        <saved_memories> are important memories that the user explicitly asked you to remember.
+        Use these memories to provide more personalized and contextually relevant responses.`;
+  }
+
+  /**
+   * Build the recent-conversations block (without the timestamp).
+   *
+   * @returns The formatted block, or null when disabled/empty.
+   */
+  private buildRecentConversationsPrompt(): string | null {
+    const settings = getSettings();
+    if (!settings.enableRecentConversations || !this.recentConversationsContent) {
+      return null;
+    }
+
+    return `<recent_conversations>
+        ${this.recentConversationsContent}
+        </recent_conversations>
+
+        <recent_conversations> are the recent conversations between you and the user.
+        You can use it to provide more context for your responses.
+        Only use the recent conversations if they are relevant to the current conversation.`;
+  }
+
+  /**
+   * Get the stable memory block (saved memories only).
+   *
+   * @returns The formatted block, or null when disabled/empty.
+   */
+  async getSavedMemoriesPrompt(): Promise<string | null> {
+    await this.loadMemory();
+    return this.buildSavedMemoriesPrompt();
+  }
+
+  /**
+   * Get the volatile memory block for the current turn.
+   *
+   * Recent conversations and the current time change every turn, so this block
+   * is appended to the current user message rather than the system prompt. That
+   * keeps the system prompt and conversation history byte-stable for prompt
+   * caching.
+   *
+   * @returns The formatted block, or null when nothing is available.
+   */
+  async getVolatileMemoryPrompt(): Promise<string | null> {
+    await this.loadMemory();
+
+    const recent = this.buildRecentConversationsPrompt();
+    const time = `The current time is ${this.getTimestamp()}.`;
+    return recent ? `${recent}\n\n${time}` : time;
+  }
+
+  /**
+   * Get the combined memory prompt (legacy behavior).
+   *
+   * Kept for callers that still expect a single prefix block. Chat requests use
+   * {@link getSavedMemoriesPrompt} and {@link getVolatileMemoryPrompt} instead.
+   *
+   * @returns The formatted block, or null when nothing is available.
    */
   async getUserMemoryPrompt(): Promise<string | null> {
     await this.loadMemory();
 
     try {
-      const settings = getSettings();
-      let memoryPrompt = "";
-
-      // Add recent conversations if enabled
-      if (settings.enableRecentConversations && this.recentConversationsContent) {
-        memoryPrompt += `<recent_conversations>
-        ${this.recentConversationsContent}
-        </recent_conversations>
-
-        The current time is ${this.getTimestamp()}.
-        <recent_conversations> are the recent conversations between you and the user. 
-        You can use it to provide more context for your responses. 
-        Only use the recent conversations if they are relevant to the current conversation.`;
-      }
-
-      // Add saved memories if enabled
-      if (settings.enableSavedMemory && this.savedMemoriesContent) {
-        memoryPrompt += `<saved_memories>
-        ${this.savedMemoriesContent}
-        </saved_memories>
-
-        <saved_memories> are important memories that the user explicitly asked you to remember. 
-        Use these memories to provide more personalized and contextually relevant responses.`;
-      }
+      const recent = this.buildRecentConversationsPrompt();
+      const memoryPrompt =
+        (recent ? `${recent}\n\nThe current time is ${this.getTimestamp()}.` : "") +
+        (this.buildSavedMemoriesPrompt() ?? "");
 
       return memoryPrompt.length > 0 ? memoryPrompt : null;
     } catch (error) {

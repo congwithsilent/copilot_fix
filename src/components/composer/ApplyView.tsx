@@ -10,7 +10,7 @@ import { Button } from "../ui/button";
 import { SettingSwitch } from "../ui/setting-switch";
 import { getChangeBlocks } from "@/composerUtils";
 import { ApplyViewResult } from "@/types";
-import { ensureFolderExists } from "@/utils";
+import { ensureFolderExists, normalizeVaultPathForWrite } from "@/utils";
 
 /** Represents a row in the diff view with original and modified content */
 interface DiffRow {
@@ -433,6 +433,9 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
   };
 
   const getFile = async (file_path: string) => {
+    // The view state is normally normalized by the tool, but never create a
+    // file for a path that resolves outside the vault.
+    file_path = normalizeVaultPathForWrite(file_path);
     const file = app.vault.getAbstractFileByPath(file_path);
     if (file) {
       return file;

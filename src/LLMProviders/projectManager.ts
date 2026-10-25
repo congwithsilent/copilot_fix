@@ -140,6 +140,22 @@ export default class ProjectManager {
   }
 
   /**
+   * Resolve the project this manager currently considers active.
+   *
+   * Unlike `getCurrentProject()` (the atom), this reflects the project whose
+   * messages are still loaded — which is the outgoing project during a switch,
+   * because the atom is updated before `switchProject()` runs.
+   *
+   * @returns The active project config, or null outside project mode.
+   */
+  public getCurrentProjectConfig(): ProjectConfig | null {
+    if (!this.currentProjectId) {
+      return null;
+    }
+    return getSettings().projectList?.find((p) => p.id === this.currentProjectId) ?? null;
+  }
+
+  /**
    * Touch the project's usage timestamp in settings with throttled persistence.
    * Memory is always updated immediately (for UI sorting), but settings writes are throttled.
    */

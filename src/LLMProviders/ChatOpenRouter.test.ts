@@ -48,4 +48,65 @@ describe("ChatOpenRouter", () => {
     const params = model.invocationParams();
     expect(params.reasoning).toEqual({ max_tokens: 1024 });
   });
+
+  describe("prompt caching", () => {
+    it("uses Anthropic cache_control for Claude models", () => {
+      const model = new ChatOpenRouter({
+        modelName: "anthropic/claude-sonnet-5.5",
+        apiKey: "test-key",
+      });
+
+      const params = model.invocationParams();
+      expect(params.cache_control).toEqual({ type: "ephemeral" });
+    });
+
+    it("adds the 1h TTL when configured", () => {
+      const model = new ChatOpenRouter({
+        modelName: "anthropic/claude-haiku-5.5",
+        apiKey: "test-key",
+        promptCacheTtl: "1h",
+      });
+
+      expect(model.invocationParams().cache_control).toEqual({
+        type: "ephemeral",
+        ttl: "1h",
+      });
+    });
+
+    it("uses automatic OpenAI caching plus a sticky session key for GPT models", () => {
+      const model = new ChatOpenRouter({
+        modelName: "openai/gpt-6-luna",
+        apiKey: "test-key",
+      });
+
+      const params = model.invocationParams({ session_id: "chat-123" } as any);
+      expect(params.cache_control).toBeUndefined();
+      expect(params.session_id).toBe("chat-123");
+      expect(params.prompt_cache_key).toBe("chat-123");
+    });
+
+    it("keeps the session id for Claude without adding prompt_cache_key", () => {
+      const model = new ChatOpenRouter({
+        modelName: "anthropic/claude-sonnet-5.5",
+        apiKey: "test-key",
+      });
+
+      const params = model.invocationParams({ session_id: "chat-abc" } as any);
+      expect(params.session_id).toBe("chat-abc");
+      expect(params.prompt_cache_key).toBeUndefined();
+      expect(params.cache_control).toEqual({ type: "ephemeral" });
+    });
+
+    it("can disable caching explicitly", () => {
+      const model = new ChatOpenRouter({
+        modelName: "anthropic/claude-sonnet-5.5",
+        apiKey: "test-key",
+        promptCacheStrategy: "off",
+      });
+
+      const params = model.invocationParams({ session_id: "chat-abc" } as any);
+      expect(params.cache_control).toBeUndefined();
+      expect(params.session_id).toBeUndefined();
+    });
+  });
 });

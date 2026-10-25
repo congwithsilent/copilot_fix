@@ -28,6 +28,8 @@ import {
 import { recordPromptPayload } from "./utils/promptPayloadRecorder";
 import { ThinkBlockStreamer } from "./utils/ThinkBlockStreamer";
 import { getModelKey } from "@/aiParams";
+import { appendVolatileMemory } from "@/memory/memoryPromptUtils";
+import { logPromptCacheDebug } from "./utils/promptCacheDebug";
 
 export class VaultQAChainRunner extends BaseChainRunner {
   async run(
@@ -199,8 +201,13 @@ export class VaultQAChainRunner extends BaseChainRunner {
       // - Items NOT in L2 → full content
       const userMessageContent = baseMessages.find((m) => m.role === "user");
       if (userMessageContent) {
-        // Prepend RAG results and citations to user content with proper separator
-        const enhancedUserContent = qaInstructions + "\n\n" + userMessageContent.content;
+        // Prepend RAG results and citations to user content with proper separator,
+        // then append volatile memory at the end of the turn.
+        const volatileMemory = await this.chainManager.userMemoryManager.getVolatileMemoryPrompt();
+        const enhancedUserContent = appendVolatileMemory(
+          qaInstructions + "\n\n" + userMessageContent.content,
+          volatileMemory
+        );
 
         // Handle multimodal content if present
         if (userMessage.content && Array.isArray(userMessage.content)) {
@@ -232,6 +239,7 @@ export class VaultQAChainRunner extends BaseChainRunner {
 
       // Record the payload for debugging (includes layered view if envelope available)
       const modelName = (chatModel as { modelName?: string } | undefined)?.modelName;
+      logPromptCacheDebug(messages, modelName);
       recordPromptPayload({
         messages,
         modelName,
@@ -244,7 +252,8 @@ export class VaultQAChainRunner extends BaseChainRunner {
       const chatStream = await withSuppressedTokenWarnings(() =>
         this.chainManager.chatModelManager.getChatModel().stream(messages, {
           signal: abortController.signal,
-        })
+          session_id: userMessage.cacheSessionId,
+        } as any)
       );
 
       for await (const chunk of chatStream) {

@@ -13,3 +13,21 @@ export function extractNotePathFromChunkId(chunkId: string): string {
   }
   return chunkId.substring(0, hashIndex);
 }
+
+/**
+ * Extract the chunk index from a chunk ID.
+ *
+ * Uses the last "#" so note names that themselves contain "#" (for example
+ * "C# Notes.md") are parsed correctly.
+ *
+ * @param chunkId - A chunk ID like "folder/note.md#2"
+ * @returns The numeric chunk index, or 0 when the ID has no "#" suffix.
+ */
+export function extractChunkIndexFromChunkId(chunkId: string): number {
+  const hashIndex = chunkId.lastIndexOf("#");
+  if (hashIndex === -1) {
+    return 0;
+  }
+  const parsed = Number.parseInt(chunkId.substring(hashIndex + 1), 10);
+  return Number.isNaN(parsed) ? 0 : parsed;
+}

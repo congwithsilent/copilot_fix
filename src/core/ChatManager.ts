@@ -1,8 +1,8 @@
 import { getSettings } from "@/settings/model";
 import {
   getEffectiveUserPrompt,
+  getStableSystemPrompt,
   getSystemPrompt,
-  getSystemPromptWithMemory,
 } from "@/system-prompts/systemPromptBuilder";
 import { ChainType } from "@/chainFactory";
 import { getChainType, getCurrentProject } from "@/aiParams";
@@ -185,29 +185,28 @@ export class ChatManager {
   }
 
   /**
-   * Replace the trailing `getSystemPrompt()` portion inside a `getSystemPromptWithMemory()` result.
-   * This preserves the memory prompt prefix exactly and ensures memory content is not template-processed.
+   * Replace the leading `getSystemPrompt()` portion inside the stable base prompt.
+   *
+   * The static system prompt now comes first (followed by the memory-placement
+   * note and saved memories) so the cached prefix stays stable across turns, so
+   * the replacement is anchored at the start rather than at the end.
    */
-  private replaceSystemPromptWithoutMemoryInBasePrompt(params: {
-    basePromptWithMemory: string;
+  private replaceStableSystemPromptInBasePrompt(params: {
+    basePrompt: string;
     systemPromptWithoutMemory: string;
     processedSystemPromptWithoutMemory: string;
   }): string {
-    const { basePromptWithMemory, systemPromptWithoutMemory, processedSystemPromptWithoutMemory } =
-      params;
+    const { basePrompt, systemPromptWithoutMemory, processedSystemPromptWithoutMemory } = params;
 
-    if (!basePromptWithMemory.endsWith(systemPromptWithoutMemory)) {
+    if (!basePrompt.startsWith(systemPromptWithoutMemory)) {
       logInfo(
-        "[ChatManager] basePromptWithMemory does not end with systemPromptWithoutMemory; returning original base prompt."
+        "[ChatManager] base prompt does not start with the static system prompt; returning original base prompt."
       );
-      return basePromptWithMemory;
+      return basePrompt;
     }
 
-    const prefix = basePromptWithMemory.slice(
-      0,
-      basePromptWithMemory.length - systemPromptWithoutMemory.length
-    );
-    return `${prefix}${processedSystemPromptWithoutMemory}`;
+    const suffix = basePrompt.slice(systemPromptWithoutMemory.length);
+    return `${processedSystemPromptWithoutMemory}${suffix}`;
   }
 
   /**
@@ -236,11 +235,16 @@ export class ChatManager {
     const userCustomPrompt = getEffectiveUserPrompt();
     const allIncludedFiles: TFile[] = [];
 
-    // Preserve original behavior (memory + system prompt) via settings/model helpers
-    const basePromptWithMemory = await getSystemPromptWithMemory(
-      this.chainManager.userMemoryManager
-    );
+    // Build a cache-stable base prompt: static system prompt first, then the
+    // rarely-changing saved memories. Volatile memory (recent conversations and
+    // the current time) is appended to the current user message by the chain
+    // runners instead of living at the start of the system prompt.
     const systemPromptWithoutMemory = getSystemPrompt();
+    const stableSystemPrompt = getStableSystemPrompt();
+    const savedMemories = await this.chainManager.userMemoryManager.getSavedMemoriesPrompt();
+    const basePromptWithMemory = savedMemories
+      ? `${stableSystemPrompt}\n\n${savedMemories}`
+      : stableSystemPrompt;
 
     let processedBasePromptWithMemory = basePromptWithMemory;
 
@@ -259,8 +263,8 @@ export class ChatManager {
           processedUserCustomPrompt: userPromptResult.processedPrompt,
         });
 
-      const nextProcessedBasePromptWithMemory = this.replaceSystemPromptWithoutMemoryInBasePrompt({
-        basePromptWithMemory,
+      const nextProcessedBasePromptWithMemory = this.replaceStableSystemPromptInBasePrompt({
+        basePrompt: basePromptWithMemory,
         systemPromptWithoutMemory,
         processedSystemPromptWithoutMemory,
       });
@@ -807,7 +811,15 @@ export class ChatManager {
    * Save current chat history
    */
   async saveChat(modelKey: string): Promise<void> {
-    await this.persistenceManager.saveChat(modelKey);
+    // Align the persistence manager with the repository being saved. During a
+    // project switch the settings atom already points at the incoming project,
+    // so save against ProjectManager's active project (the outgoing one) rather
+    // than `getCurrentProject()`, which would file this chat under the wrong id.
+    this.getCurrentMessageRepo();
+    await this.persistenceManager.saveChat(
+      modelKey,
+      this.plugin.projectManager.getCurrentProjectConfig()
+    );
   }
 
   /**

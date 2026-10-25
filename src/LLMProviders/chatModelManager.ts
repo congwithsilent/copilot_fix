@@ -331,6 +331,10 @@ export default class ChatModelManager {
         reasoningEffort: customModel.reasoningEffort || undefined,
         // Enable prompt caching by default; can be turned off for ZDR endpoints
         enablePromptCaching: customModel.enablePromptCaching ?? true,
+        // "auto" picks Anthropic vs OpenAI policy from the model id. TTL only
+        // applies to Anthropic-style caching (5m default, 1h optional).
+        promptCacheStrategy: customModel.promptCacheStrategy ?? "auto",
+        promptCacheTtl: customModel.promptCacheTtl ?? "5m",
       },
       [ChatModelProviders.GROQ]: {
         apiKey: await getDecryptedKey(customModel.apiKey || settings.groqApiKey),
@@ -355,7 +359,8 @@ export default class ChatModelManager {
       },
       [ChatModelProviders.LM_STUDIO]: {
         modelName: modelName,
-        apiKey: customModel.apiKey || "default-key",
+        // Stored per-model keys are encrypted when encryption is enabled.
+        apiKey: await getDecryptedKey(customModel.apiKey || "default-key"),
         streamUsage: customModel.streamUsage ?? false,
         configuration: {
           baseURL: customModel.baseUrl || "http://localhost:1234/v1",
@@ -372,7 +377,10 @@ export default class ChatModelManager {
       },
       [ChatModelProviders.OPENAI_FORMAT]: {
         modelName: modelName,
-        apiKey: await getDecryptedKey(customModel.apiKey || settings.openAIApiKey),
+        // Never fall back to the global OpenAI key here: this provider points
+        // at arbitrary third-party (or local) endpoints, and sending the user's
+        // OpenAI credential to an unrelated host is a credential leak.
+        apiKey: await getDecryptedKey(customModel.apiKey || "default-key"),
         streamUsage: customModel.streamUsage ?? false,
         configuration: {
           baseURL: customModel.baseUrl,
@@ -480,6 +488,26 @@ export default class ChatModelManager {
    * NOTE: GPT-5 models require Responses API for verbosity parameter to work.
    * The useResponsesApi flag is set automatically in createModelInstance() for GPT-5.
    */
+  /**
+   * Whether a model is routed to the OpenAI Responses API.
+   *
+   * GPT-5 models use Responses for verbosity support, but gateways offering a
+   * custom base URL usually implement only `/v1/chat/completions`, so a custom
+   * endpoint must stay on Chat Completions.
+   *
+   * @param model Custom model definition.
+   * @param isGPT5 Whether the model belongs to the GPT-5 family.
+   * @returns True when the Responses API should be used.
+   */
+  private shouldUseResponsesApi(model: CustomModel | undefined, isGPT5: boolean): boolean {
+    if (!isGPT5 || !model) return false;
+    if (model.baseUrl?.trim()) return false;
+    return (
+      model.provider === ChatModelProviders.OPENAI ||
+      model.provider === ChatModelProviders.OPENAI_FORMAT
+    );
+  }
+
   private getOpenAISpecialConfig(
     modelName: string,
     maxTokens: number,
@@ -508,10 +536,15 @@ export default class ChatModelManager {
         effort: customModel.reasoningEffort,
       };
       config.reasoningEffort = customModel.reasoningEffort;
-      config.modelKwargs = {
-        ...(config.modelKwargs || {}),
-        reasoning_effort: customModel.reasoningEffort,
-      };
+      // `reasoning_effort` is a Chat Completions field. On the Responses API
+      // (`/v1/responses`) it is not recognized and would make every GPT-5
+      // request fail with 400; there the effort is carried by `reasoning`.
+      if (!this.shouldUseResponsesApi(customModel, modelInfo.isGPT5)) {
+        config.modelKwargs = {
+          ...(config.modelKwargs || {}),
+          reasoning_effort: customModel.reasoningEffort,
+        };
+      }
 
       // Add verbosity for GPT-5 models (Responses API only).
       // Azure does not support Responses API so skip verbosity there;
@@ -840,11 +873,7 @@ export default class ChatModelManager {
 
     // For GPT-5 models, automatically use Responses API for proper verbosity support
     const constructorConfig: any = { ...modelConfig };
-    if (
-      modelInfo.isGPT5 &&
-      (selectedModel.vendor === ChatModelProviders.OPENAI ||
-        selectedModel.vendor === ChatModelProviders.OPENAI_FORMAT)
-    ) {
+    if (this.shouldUseResponsesApi(model, modelInfo.isGPT5)) {
       constructorConfig.useResponsesApi = true;
       logInfo(`Enabling Responses API for GPT-5 model: ${model.name} (${selectedModel.vendor})`);
     }
@@ -918,11 +947,7 @@ export default class ChatModelManager {
         ...tokenConfig,
       };
 
-      if (
-        modelInfo.isGPT5 &&
-        (model.provider === ChatModelProviders.OPENAI ||
-          model.provider === ChatModelProviders.OPENAI_FORMAT)
-      ) {
+      if (this.shouldUseResponsesApi(model, modelInfo.isGPT5)) {
         constructorConfig.useResponsesApi = true;
       }
 

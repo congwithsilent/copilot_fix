@@ -4,7 +4,9 @@ import { logError, logInfo, logWarn } from "@/logger";
 import { UserMemoryManager } from "@/memory/UserMemoryManager";
 import { checkIsPlusUser } from "@/plusUtils";
 import { getSettings } from "@/settings/model";
-import { getSystemPromptWithMemory } from "@/system-prompts/systemPromptBuilder";
+import { getStableSystemPrompt } from "@/system-prompts/systemPromptBuilder";
+import { appendVolatileMemory } from "@/memory/memoryPromptUtils";
+import { logPromptCacheDebug } from "./utils/promptCacheDebug";
 import { initializeBuiltinTools } from "@/tools/builtinTools";
 import { ToolRegistry } from "@/tools/ToolRegistry";
 import { StructuredTool } from "@langchain/core/tools";
@@ -103,6 +105,8 @@ interface ReActLoopParams {
   processLocalSearchResult: AgentLoopDeps["processLocalSearchResult"];
   applyCiCOrderingToLocalSearchResult: AgentLoopDeps["applyCiCOrderingToLocalSearchResult"];
   adapter: ModelAdapter;
+  /** Stable per-conversation key for prompt-cache routing. */
+  cacheSessionId?: string;
 }
 
 /**
@@ -305,7 +309,11 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
     _adapter?: ModelAdapter, // Unused, kept for backwards compatibility with tests
     userMemoryManager?: UserMemoryManager
   ): Promise<string> {
-    const basePrompt = await getSystemPromptWithMemory(userMemoryManager);
+    const stablePrompt = getStableSystemPrompt();
+    const savedMemories = userMemoryManager
+      ? await userMemoryManager.getSavedMemoriesPrompt()
+      : null;
+    const basePrompt = savedMemories ? `${stablePrompt}\n\n${savedMemories}` : stablePrompt;
 
     // Get tool metadata for custom instructions (semantic guidance only)
     const registry = ToolRegistry.getInstance();
@@ -442,6 +450,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
         processLocalSearchResult: context.loopDeps.processLocalSearchResult,
         applyCiCOrderingToLocalSearchResult: context.loopDeps.applyCiCOrderingToLocalSearchResult,
         adapter,
+        cacheSessionId: userMessage.cacheSessionId,
       });
 
       // If abort was already handled by timer, skip further processing
@@ -620,10 +629,14 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
     // Extract user content (L3 smart references + L5) from base messages
     const userMessageContent = baseMessages.find((m) => m.role === "user");
     if (userMessageContent) {
+      // Volatile memory is appended only to the initial user message of the
+      // turn, never to the tool-result iterations that follow.
+      const volatileMemory = await this.chainManager.userMemoryManager.getVolatileMemoryPrompt();
+      const baseContent = appendVolatileMemory(userMessageContent.content, volatileMemory);
       const isMultimodal = this.isMultimodalModel(chatModel);
       const content: string | MessageContent[] = isMultimodal
-        ? await this.buildMessageContent(userMessageContent.content, userMessage)
-        : userMessageContent.content;
+        ? await this.buildMessageContent(baseContent, userMessage)
+        : baseContent;
       messages.push(new HumanMessage(content));
     }
 
@@ -649,6 +662,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
       updateCurrentAiMessage,
       processLocalSearchResult,
       applyCiCOrderingToLocalSearchResult,
+      cacheSessionId,
     } = params;
 
     const maxIterations = getSettings().autonomousAgentMaxIterations;
@@ -678,7 +692,8 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
         boundModel,
         messages,
         abortController,
-        updateCurrentAiMessage
+        updateCurrentAiMessage,
+        cacheSessionId
       );
 
       responseMetadata = {
@@ -911,7 +926,8 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
             params.chatModel,
             messages,
             abortController,
-            updateCurrentAiMessage
+            updateCurrentAiMessage,
+            cacheSessionId
           );
 
           responseMetadata = {
@@ -1003,7 +1019,8 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
     boundModel: Runnable,
     messages: BaseMessage[],
     abortController: AbortController,
-    _updateCurrentAiMessage: (message: string) => void
+    _updateCurrentAiMessage: (message: string) => void,
+    cacheSessionId?: string
   ): Promise<{ content: string; aiMessage: AIMessage; streamingResult: StreamingResult }> {
     const toolCallChunks: Map<number, ToolCallChunk> = new Map();
 
@@ -1017,10 +1034,16 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
     let rawContent = ""; // Accumulate raw content before think-stripping, for debug logging
 
     try {
+      logPromptCacheDebug(
+        messages as any[],
+        (this.chainManager.chatModelManager.getChatModel() as { modelName?: string } | undefined)
+          ?.modelName
+      );
       const stream = await withSuppressedTokenWarnings(() =>
         boundModel.stream(messages, {
           signal: abortController.signal,
-        })
+          session_id: cacheSessionId,
+        } as any)
       );
 
       for await (const chunk of stream) {

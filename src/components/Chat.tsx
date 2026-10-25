@@ -45,7 +45,7 @@ import { useIsPlusUser } from "@/plusUtils";
 import { updateSetting, useSettingsValue } from "@/settings/model";
 import { ChatUIState } from "@/state/ChatUIState";
 import { FileParserManager } from "@/tools/FileParserManager";
-import { ChatMessage } from "@/types/message";
+import { ChatMessage, TokenUsage } from "@/types/message";
 import { err2String, isPlusChain } from "@/utils";
 import { arrayBufferToBase64 } from "@/utils/base64";
 import { Notice, TFile } from "obsidian";
@@ -85,7 +85,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
   const [currentChain] = useChainType();
   const [currentAiMessage, setCurrentAiMessage] = useState("");
   const [inputMessage, setInputMessage] = useState("");
-  const [latestTokenCount, setLatestTokenCount] = useState<number | null>(null);
+  const [latestTokenUsage, setLatestTokenUsage] = useState<TokenUsage | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   // Stable ID for streaming message, shared with final persisted message
   // This allows collapsible UI state (think blocks) to persist across streaming -> history
@@ -101,11 +101,8 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
       const messageToAdd = shouldAttachId ? { ...message, id: streamingId } : message;
 
       rawAddMessage(messageToAdd);
-      if (
-        messageToAdd.sender === AI_SENDER &&
-        messageToAdd.responseMetadata?.tokenUsage?.totalTokens
-      ) {
-        setLatestTokenCount(messageToAdd.responseMetadata.tokenUsage.totalTokens);
+      if (messageToAdd.sender === AI_SENDER && messageToAdd.responseMetadata?.tokenUsage) {
+        setLatestTokenUsage(messageToAdd.responseMetadata.tokenUsage);
       }
     },
     [rawAddMessage]
@@ -288,7 +285,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
   // Clear token count when chat is cleared or replaced (e.g., loading chat history)
   useEffect(() => {
     if (chatHistory.length === 0) {
-      setLatestTokenCount(null);
+      setLatestTokenUsage(null);
     }
   }, [chatHistory]);
 
@@ -794,7 +791,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
     // Additional UI state reset specific to this component
     resetStreamingContent();
     setContextNotes([]);
-    setLatestTokenCount(null); // Clear token count on new chat
+    setLatestTokenUsage(null); // Clear token count on new chat
     // Capture web selection URL before clearing for suppression
     const webSelectionUrl = selectedTextContexts.find((ctx) => ctx.sourceType === "web")?.url;
     clearSelectedTextContexts();
@@ -865,6 +862,10 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
   const handleLoadChat = useCallback(
     async (id: string) => {
       try {
+        // A reply still streaming belongs to the chat being left behind. Abort
+        // it first (NEW_CHAT suppresses the partial message) so its completion
+        // cannot be appended to the conversation that is about to be loaded.
+        handleStopGenerating(ABORT_REASON.NEW_CHAT);
         await plugin.loadChatById(id);
         // Reset all session-level system prompt settings to global defaults when loading a chat
         resetSessionSystemPromptSettings();
@@ -873,7 +874,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
         new Notice("Failed to load chat.");
       }
     },
-    [plugin]
+    [plugin, handleStopGenerating]
   );
 
   const handleOpenSourceFile = useCallback(
@@ -986,7 +987,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
               onDeleteChat={handleDeleteChat}
               onLoadChat={handleLoadChat}
               onOpenSourceFile={handleOpenSourceFile}
-              latestTokenCount={latestTokenCount}
+              latestTokenUsage={latestTokenUsage}
             />
             <ChatInput
               inputMessage={inputMessage}

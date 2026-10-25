@@ -5,12 +5,13 @@ import { getSettings } from "@/settings/model";
 import { logInfo, logError } from "@/logger";
 import { App, Notice, PluginSettingTab } from "obsidian";
 import React from "react";
-import { createRoot } from "react-dom/client";
+import { createRoot, type Root } from "react-dom/client";
 import SettingsMainV2 from "@/settings/v2/SettingsMainV2";
 import { ContainerContext } from "@/settings/v2/components/ContainerContext";
 
 export class CopilotSettingTab extends PluginSettingTab {
   plugin: CopilotPlugin;
+  private root: Root | null = null;
 
   constructor(app: App, plugin: CopilotPlugin) {
     super(app, plugin);
@@ -59,13 +60,23 @@ export class CopilotSettingTab extends PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
     containerEl.style.userSelect = "text";
-    const div = containerEl.createDiv("div");
-    const sections = createRoot(div);
 
-    sections.render(
+    // Unmount any previous tree: every display() used to create a new React
+    // root and abandon the old one, keeping its settings subscriptions,
+    // ResizeObservers and modals alive for the lifetime of the app.
+    this.root?.unmount();
+    const div = containerEl.createDiv("div");
+    this.root = createRoot(div);
+
+    this.root.render(
       <ContainerContext.Provider value={containerEl}>
         <SettingsMainV2 plugin={this.plugin} />
       </ContainerContext.Provider>
     );
+  }
+
+  hide(): void {
+    this.root?.unmount();
+    this.root = null;
   }
 }

@@ -39,6 +39,7 @@ import {
   sanitizeSettings,
   setSettings,
   subscribeToSettingsChange,
+  type CopilotSettings,
 } from "@/settings/model";
 import { ChatUIState } from "@/state/ChatUIState";
 import { VaultDataManager } from "@/state/vaultDataAtoms";
@@ -91,15 +92,40 @@ export default class CopilotPlugin extends Plugin {
   private lastSelectionSignature?: string;
   private webSelectionTracker?: WebSelectionTracker;
   private readonly chatHistoryLastAccessedAtManager = new RecentUsageManager<string>();
+  /** Serializes settings writes so an older snapshot can never land last. */
+  private settingsSaveChain: Promise<void> = Promise.resolve();
+  /** Monotonic revision used to skip snapshots superseded before they were written. */
+  private settingsSaveRevision = 0;
+
+  /**
+   * Persist settings, serializing writes.
+   *
+   * Settings changes arrive in bursts (a switch followed by a slider, or every
+   * keystroke in an encrypted field) and `saveData` is async, so independent
+   * calls can complete out of order: the older snapshot then wins on disk.
+   * Chaining writes guarantees the newest snapshot is the final one; the
+   * revision check avoids writing snapshots that have already been superseded.
+   *
+   * @param next Settings snapshot to persist.
+   */
+  private queueSettingsSave(next: CopilotSettings): void {
+    const revision = ++this.settingsSaveRevision;
+    this.settingsSaveChain = this.settingsSaveChain
+      .then(async () => {
+        if (revision !== this.settingsSaveRevision) {
+          return;
+        }
+        await this.saveData(next.enableEncryption ? await encryptAllKeys(next) : next);
+      })
+      .catch((error) => {
+        logWarn("Failed to save settings:", error);
+      });
+  }
 
   async onload(): Promise<void> {
     await this.loadSettings();
-    this.settingsUnsubscriber = subscribeToSettingsChange(async (prev, next) => {
-      if (next.enableEncryption) {
-        await this.saveData(await encryptAllKeys(next));
-      } else {
-        await this.saveData(next);
-      }
+    this.settingsUnsubscriber = subscribeToSettingsChange((prev, next) => {
+      this.queueSettingsSave(next);
       registerCommands(this, prev, next);
     });
     this.addSettingTab(new CopilotSettingTab(this.app, this));
@@ -232,6 +258,11 @@ export default class CopilotPlugin extends Plugin {
     if (this.projectManager) {
       this.projectManager.onunload();
     }
+
+    // Flush pending index writes and detach the index event handlers. Without
+    // this, a hot reload registers a second handler set and reindexes the same
+    // files twice, and unsaved index changes since the last checkpoint are lost.
+    this.vectorStoreManager?.onunload();
 
     // Cleanup VaultDataManager event listeners
     const vaultDataManager = VaultDataManager.getInstance();

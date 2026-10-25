@@ -14,6 +14,23 @@ import { logInfo } from "@/logger";
  */
 export class MessageRepository {
   private messages: StoredMessage[] = [];
+  /** Fallback key for an empty conversation (before the first message exists). */
+  private readonly instanceCacheKey = `chat-${Date.now().toString(36)}-${Math.random()
+    .toString(36)
+    .slice(2, 10)}`;
+
+  /**
+   * Stable key for provider prompt-cache locality.
+   *
+   * Derived from the first message's epoch so it survives reloading a saved
+   * chat. Before the first message exists, a per-repository key is used.
+   *
+   * @returns A stable conversation key.
+   */
+  getConversationCacheKey(): string {
+    const epoch = this.messages[0]?.timestamp?.epoch;
+    return epoch ? `chat-${epoch}` : this.instanceCacheKey;
+  }
 
   /**
    * Generate a unique message ID
@@ -243,6 +260,7 @@ export class MessageRepository {
       isVisible: false, // LLM messages are not for display
       context: msg.context,
       contextEnvelope: msg.contextEnvelope, // NEW: Use this for envelope-based runners
+      cacheSessionId: this.getConversationCacheKey(),
       isErrorMessage: msg.isErrorMessage,
       sources: msg.sources,
       content: msg.content,
@@ -268,6 +286,7 @@ export class MessageRepository {
       isVisible: false,
       context: msg.context,
       contextEnvelope: msg.contextEnvelope,
+      cacheSessionId: this.getConversationCacheKey(),
       isErrorMessage: msg.isErrorMessage,
       sources: msg.sources,
       content: msg.content,

@@ -8,6 +8,7 @@ import { App, TFile } from "obsidian";
 import { ChunkManager, getSharedChunkManager } from "./chunks";
 import { SearchCore } from "./SearchCore";
 import { ExpandedQuery } from "./QueryExpander";
+import { extractChunkIndexFromChunkId, extractNotePathFromChunkId } from "./utils/chunkIdUtils";
 // Defer requiring ChatModelManager until runtime to avoid test-time import issues
 let getChatModelManagerSingleton: (() => any) | null = null;
 async function safeGetChatModel() {
@@ -142,12 +143,14 @@ export class TieredLexicalRetriever extends BaseRetriever {
 
     for (const result of searchResults) {
       try {
-        // Check if this is a chunk ID (contains #) or note ID
-        const isChunkId = result.id.includes("#");
+        // A chunk ID ends in "#<index>". Check the suffix rather than just
+        // looking for "#", because note names may legally contain "#".
+        const lastHash = result.id.lastIndexOf("#");
+        const isChunkId = lastHash !== -1 && /^\d+$/.test(result.id.substring(lastHash + 1));
 
         if (isChunkId) {
           // Handle chunk result: get chunk content from ChunkManager
-          const [notePath] = result.id.split("#");
+          const notePath = extractNotePathFromChunkId(result.id);
           const file = this.app.vault.getAbstractFileByPath(notePath);
           if (!file || !(file instanceof TFile)) continue;
 
@@ -236,8 +239,8 @@ export class TieredLexicalRetriever extends BaseRetriever {
 
       // If scores are similar and both are chunks from the same note, sort by chunk index
       if (a.metadata.isChunk && b.metadata.isChunk && a.metadata.path === b.metadata.path) {
-        const aChunkIndex = parseInt(a.metadata.chunkId?.split("#")[1] || "0");
-        const bChunkIndex = parseInt(b.metadata.chunkId?.split("#")[1] || "0");
+        const aChunkIndex = extractChunkIndexFromChunkId(a.metadata.chunkId || "");
+        const bChunkIndex = extractChunkIndexFromChunkId(b.metadata.chunkId || "");
         return aChunkIndex - bChunkIndex;
       }
 

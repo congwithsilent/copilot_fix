@@ -250,7 +250,17 @@ export function sanitizeQaExclusions(rawValue: unknown): string {
 
   const decodedPatterns: string[] = rawValueString
     .split(",")
-    .map((pattern: string) => decodeURIComponent(pattern.trim()))
+    .map((pattern: string) => {
+      const trimmed = pattern.trim();
+      try {
+        return decodeURIComponent(trimmed);
+      } catch {
+        // A malformed percent sequence (for example a folder named "100% Done")
+        // must not abort settings sanitization: loadSettings runs during
+        // onload, so throwing here stops the plugin from enabling at all.
+        return trimmed;
+      }
+    })
     .filter((pattern: string) => pattern.length > 0);
 
   const canonicalToOriginalPattern = new Map<string, string>();

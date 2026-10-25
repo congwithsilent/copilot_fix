@@ -824,6 +824,15 @@ export async function safeFetch(
   logInfo("safeFetch request");
 
   if (typeof require !== "undefined") {
+    /** AbortError shaped like the one native fetch rejects with. */
+    const createAbortError = () => {
+      const message = "The operation was aborted.";
+      if (typeof DOMException !== "undefined") {
+        return new DOMException(message, "AbortError");
+      }
+      return Object.assign(new Error(message), { name: "AbortError" });
+    };
+
     try {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const https = require("https");
@@ -833,20 +842,45 @@ export async function safeFetch(
       const urlObj = new URL(urlStr);
       const isHttps = urlObj.protocol === "https:";
       const mod = isHttps ? https : http;
+      const method = options.method?.toUpperCase() || "POST";
+      const requestBody = options.body;
+
+      // FormData needs the platform multipart encoder; this hand-rolled path
+      // only serializes the JSON/text bodies the SDK transports send. Throw
+      // before opening a socket so the caller falls back to requestUrl.
+      if (typeof FormData !== "undefined" && requestBody instanceof FormData) {
+        throw new Error("FormData bodies are not supported by the Node request path");
+      }
 
       return await new Promise<Response>((resolve, reject) => {
         const req = mod.request(
           urlObj,
           {
-            method: options.method?.toUpperCase() || "POST",
+            method,
             headers: headers,
           },
           (res: any) => {
             const status = res.statusCode || 200;
 
             if ([301, 302, 303, 307, 308].includes(status) && res.headers.location) {
+              // Drain the redirect body so the socket can be reused/closed.
+              res.resume();
+              const redirectCount = Number((options as any)._redirectCount ?? 0);
+              if (redirectCount >= 5) {
+                reject(new Error("Too many redirects"));
+                return;
+              }
+              // 303 (and the legacy 301/302 responses to POST) turn into GET
+              // without a body, matching browser fetch behavior.
+              const losesBody =
+                status === 303 || ((status === 301 || status === 302) && method === "POST");
+              const nextOptions: any = {
+                ...options,
+                _redirectCount: redirectCount + 1,
+                ...(losesBody ? { method: "GET", body: undefined } : {}),
+              };
               const nextUrl = new URL(res.headers.location, urlObj).toString();
-              return resolve(safeFetch(nextUrl, options));
+              return resolve(safeFetch(nextUrl, nextOptions));
             }
 
             const resHeaders = new Headers();
@@ -896,34 +930,53 @@ export async function safeFetch(
               start(ctrl) {
                 res.on("data", (c: Buffer) => ctrl.enqueue(new Uint8Array(c)));
                 res.on("end", () => ctrl.close());
-                res.on("error", (err: Error) => ctrl.error(err));
+                res.on("error", (err: Error) => {
+                  try {
+                    ctrl.error(err);
+                  } catch {
+                    // Stream already closed; nothing to propagate.
+                  }
+                });
+                res.on("aborted", () => {
+                  try {
+                    ctrl.error(createAbortError());
+                  } catch {
+                    // Stream already closed; nothing to propagate.
+                  }
+                });
               },
               cancel() {
                 req.destroy();
               },
             });
 
-            const readBodyText = async () => {
+            let bodyUsed = false;
+            const readBodyBytes = async (): Promise<Uint8Array> => {
+              if (bodyUsed) {
+                throw new TypeError("Body has already been consumed.");
+              }
+              bodyUsed = true;
               const reader = bodyStream.getReader();
               const ch: Uint8Array[] = [];
-              let isReading = true;
-              while (isReading) {
+              let total = 0;
+              for (;;) {
                 const { done, value } = await reader.read();
-                if (done) {
-                  isReading = false;
-                  break;
+                if (done) break;
+                if (value) {
+                  ch.push(value);
+                  total += value.length;
                 }
-                if (value) ch.push(value);
               }
-              const len = ch.reduce((a, b) => a + b.length, 0);
-              const b = new Uint8Array(len);
-              let off = 0;
+              reader.releaseLock();
+              const bytes = new Uint8Array(total);
+              let offset = 0;
               for (const item of ch) {
-                b.set(item, off);
-                off += item.length;
+                bytes.set(item, offset);
+                offset += item.length;
               }
-              return new TextDecoder().decode(b);
+              return bytes;
             };
+            const readBodyText = async () => new TextDecoder().decode(await readBodyBytes());
 
             resolve({
               ok: status >= 200 && status < 300,
@@ -933,14 +986,19 @@ export async function safeFetch(
               url: urlStr,
               type: "basic" as ResponseType,
               redirected: false,
-              bytes: () => Promise.resolve(new Uint8Array(0)),
+              get bodyUsed() {
+                return bodyUsed;
+              },
+              bytes: () => readBodyBytes(),
               body: bodyStream as any,
-              bodyUsed: false,
               json: async () => JSON.parse(await readBodyText()),
               text: async () => await readBodyText(),
+              // Binary bodies (images, PDFs, audio) must never round-trip
+              // through a string: TextDecoder replaces invalid UTF-8 bytes and
+              // would silently corrupt the payload.
               arrayBuffer: async () => {
-                const text = await readBodyText();
-                return new TextEncoder().encode(text).buffer;
+                const bytes = await readBodyBytes();
+                return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
               },
               blob: () => {
                 throw new Error("not implemented");
@@ -955,17 +1013,42 @@ export async function safeFetch(
           }
         );
 
+        const onAbort = () => {
+          // `req.destroy()` without an error emits no 'error' event, which would
+          // leave this promise pending forever. Pass an AbortError so the
+          // 'error' listener below settles it; when the response already
+          // resolved, destroying the request tears down the body stream instead.
+          req.destroy(createAbortError());
+        };
         if (options.signal) {
-          options.signal.addEventListener("abort", () => req.destroy());
+          if (options.signal.aborted) {
+            reject(createAbortError());
+            return;
+          }
+          options.signal.addEventListener("abort", onAbort, { once: true });
         }
+        req.on("close", () => options.signal?.removeEventListener("abort", onAbort));
         req.on("error", reject);
-        if (options.body) {
-          req.write(typeof options.body === "string" ? options.body : JSON.stringify(options.body));
+        if (requestBody !== undefined && requestBody !== null) {
+          if (typeof requestBody === "string") {
+            req.write(requestBody);
+          } else if (requestBody instanceof Uint8Array) {
+            req.write(requestBody);
+          } else if (requestBody instanceof ArrayBuffer) {
+            req.write(new Uint8Array(requestBody));
+          } else if (
+            typeof URLSearchParams !== "undefined" &&
+            requestBody instanceof URLSearchParams
+          ) {
+            req.write(requestBody.toString());
+          } else {
+            req.write(JSON.stringify(requestBody));
+          }
         }
         req.end();
       });
     } catch (nodeErr) {
-      logInfo("safeFetch Node streaming fallback:", nodeErr);
+      logInfo("safeFetch Node request path unavailable, falling back to requestUrl:", nodeErr);
     }
   }
 
@@ -1650,6 +1733,44 @@ export function sanitizeFilePath(filePath: string): string {
   }
 
   return parts.join("/");
+}
+
+/**
+ * Validate and normalize a vault-relative path before writing to it.
+ *
+ * `sanitizeFilePath` only enforces filename length; it does not resolve dot
+ * segments. Obsidian's adapter joins the supplied path onto the vault root, so
+ * a path like `../evil.md` would create files outside the vault. This rejects
+ * absolute paths, traversal segments, and Obsidian's config folder, and returns
+ * a clean path (`./note.md` → `note.md`, backslashes → slashes).
+ *
+ * @param filePath Model-supplied path, expected to be relative to the vault root.
+ * @returns Normalized vault-relative path.
+ * @throws When the path is absolute, escapes the vault, or targets `.obsidian`.
+ */
+export function normalizeVaultPathForWrite(filePath: string): string {
+  const trimmed = (filePath || "").trim().replace(/\\/g, "/");
+  if (!trimmed) {
+    throw new Error("File path is required.");
+  }
+
+  // POSIX absolute, Windows drive-letter, or UNC (after backslash conversion).
+  if (trimmed.startsWith("/") || /^[a-zA-Z]:/.test(trimmed)) {
+    throw new Error(`File path must be relative to the vault root: "${filePath}"`);
+  }
+
+  const segments = trimmed.split("/").filter((segment) => segment.length > 0 && segment !== ".");
+  if (segments.some((segment) => segment === "..")) {
+    throw new Error(`File path must not contain ".." segments: "${filePath}"`);
+  }
+  if (segments.length === 0) {
+    throw new Error(`File path is empty after normalization: "${filePath}"`);
+  }
+  if (segments[0] === ".obsidian") {
+    throw new Error(`File path must not target Obsidian's configuration folder: "${filePath}"`);
+  }
+
+  return normalizePath(segments.join("/"));
 }
 
 /**

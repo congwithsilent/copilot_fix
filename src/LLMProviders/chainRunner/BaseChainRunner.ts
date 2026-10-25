@@ -1,5 +1,6 @@
 import { ABORT_REASON, AI_SENDER } from "@/constants";
 import { logError, logInfo } from "@/logger";
+import { getSettings } from "@/settings/model";
 import { ChatMessage, ResponseMetadata } from "@/types/message";
 import { err2String, formatDateTime } from "@/utils";
 import ChainManager from "../chainManager";
@@ -68,6 +69,17 @@ export abstract class BaseChainRunner implements ChainRunner {
     const shouldAddMessage =
       (fullAIResponse || responseMetadata?.wasTruncated) &&
       !(abortController.signal.aborted && abortController.signal.reason === ABORT_REASON.NEW_CHAT);
+
+    // Surface prompt-cache counters in debug mode so hit rates can be measured
+    // without attaching a debugger to the provider response.
+    if (getSettings().debug && responseMetadata?.tokenUsage) {
+      const usage = responseMetadata.tokenUsage;
+      const hitRate =
+        usage.inputTokens && usage.cachedInputTokens !== undefined
+          ? `${Math.round((usage.cachedInputTokens / usage.inputTokens) * 100)}%`
+          : undefined;
+      logInfo("[PromptCache] token usage", { ...usage, hitRate });
+    }
 
     if (shouldAddMessage) {
       // Save the expanded user message (L5) to memory — NOT the full processedText.

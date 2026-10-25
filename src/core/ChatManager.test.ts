@@ -48,11 +48,17 @@ jest.mock("@/settings/model", () => ({
   getSettings: jest.fn().mockReturnValue({ enableCustomPromptTemplating: true }),
 }));
 
-jest.mock("@/system-prompts/systemPromptBuilder", () => ({
-  getSystemPromptWithMemory: jest.fn().mockResolvedValue("Test system prompt"),
-  getSystemPrompt: jest.fn().mockReturnValue("Test system prompt"),
-  getEffectiveUserPrompt: jest.fn().mockReturnValue(""),
-}));
+jest.mock("@/system-prompts/systemPromptBuilder", () => {
+  const mod: any = {
+    getSystemPromptWithMemory: jest.fn().mockResolvedValue("Test system prompt"),
+    getSystemPrompt: jest.fn().mockReturnValue("Test system prompt"),
+    getEffectiveUserPrompt: jest.fn().mockReturnValue(""),
+  };
+  // The stable prompt delegates to the mocked getSystemPrompt so existing
+  // tests can keep controlling it through getSystemPrompt.mockReturnValue.
+  mod.getStableSystemPrompt = jest.fn(() => mod.getSystemPrompt());
+  return mod;
+});
 
 jest.mock("@/commands/customCommandUtils", () => ({
   processPrompt: jest.fn().mockResolvedValue({
@@ -115,6 +121,11 @@ describe("ChatManager", () => {
     mockChainManager = {
       memoryManager: {
         clearChatMemory: jest.fn(),
+      },
+      userMemoryManager: {
+        getSavedMemoriesPrompt: jest.fn().mockResolvedValue(null),
+        getVolatileMemoryPrompt: jest.fn().mockResolvedValue(null),
+        getUserMemoryPrompt: jest.fn().mockResolvedValue(null),
       },
       runChain: jest.fn(),
     };
@@ -1222,9 +1233,12 @@ describe("ChatManager", () => {
   describe("System Prompt Template Processing", () => {
     // Import mocked modules for manipulation
     const { processPrompt } = jest.requireMock("@/commands/customCommandUtils");
-    const { getSystemPrompt, getSystemPromptWithMemory, getEffectiveUserPrompt } = jest.requireMock(
-      "@/system-prompts/systemPromptBuilder"
-    );
+    const {
+      getSystemPrompt,
+      getSystemPromptWithMemory,
+      getStableSystemPrompt,
+      getEffectiveUserPrompt,
+    } = jest.requireMock("@/system-prompts/systemPromptBuilder");
     const { getSettings } = jest.requireMock("@/settings/model");
     const { getCurrentProject } = jest.requireMock("@/aiParams");
 
@@ -1234,6 +1248,8 @@ describe("ChatManager", () => {
       processPrompt.mockResolvedValue({ processedPrompt: "", includedFiles: [] });
       getSystemPrompt.mockReturnValue("Test system prompt");
       getSystemPromptWithMemory.mockResolvedValue("Test system prompt");
+      getStableSystemPrompt.mockImplementation(() => getSystemPrompt());
+      mockChainManager.userMemoryManager.getSavedMemoriesPrompt.mockResolvedValue(null);
       getSettings.mockReturnValue({ enableCustomPromptTemplating: true });
       getCurrentProject.mockReturnValue(null);
     });
@@ -1659,10 +1675,8 @@ describe("ChatManager", () => {
 
         getEffectiveUserPrompt.mockReturnValue(userCustomPrompt);
         getSystemPrompt.mockReturnValue(systemPromptWithoutMemory);
-        // Memory prefix + system prompt
-        getSystemPromptWithMemory.mockResolvedValue(
-          `${memoryContent}\n\n${systemPromptWithoutMemory}`
-        );
+        // Saved memories are appended to the stable system prompt.
+        mockChainManager.userMemoryManager.getSavedMemoriesPrompt.mockResolvedValue(memoryContent);
 
         processPrompt.mockResolvedValue({
           processedPrompt: "Processed user content",
@@ -1771,8 +1785,8 @@ describe("ChatManager", () => {
 
         getEffectiveUserPrompt.mockReturnValue(userCustomPrompt);
         getSystemPrompt.mockReturnValue(userCustomPrompt);
-        // Memory + user prompt (no DEFAULT_SYSTEM_PROMPT)
-        getSystemPromptWithMemory.mockResolvedValue(`${memoryContent}\n${userCustomPrompt}`);
+        // Saved memories are appended to the stable system prompt.
+        mockChainManager.userMemoryManager.getSavedMemoriesPrompt.mockResolvedValue(memoryContent);
 
         processPrompt.mockResolvedValue({
           processedPrompt: "PROCESSED",
@@ -1795,8 +1809,8 @@ describe("ChatManager", () => {
       });
     });
 
-    describe("EndsWith Mismatch Fallback", () => {
-      it("should fallback to original base prompt when endsWith check fails", async () => {
+    describe("Prefix Mismatch Fallback", () => {
+      it("should fallback to original base prompt when the prefix check fails", async () => {
         const mockActiveFile = { path: "test.md", basename: "Test Note" } as TFile;
         const mockMessage = createMockMessage("msg-1", "Hello", USER_SENDER);
         const context: MessageContext = { notes: [], urls: [], selectedTextContexts: [] };
@@ -1804,10 +1818,10 @@ describe("ChatManager", () => {
         const userCustomPrompt = "Use {activeNote}";
         getEffectiveUserPrompt.mockReturnValue(userCustomPrompt);
 
-        // Simulate a mismatch: getSystemPrompt returns different content than
-        // the suffix of getSystemPromptWithMemory (edge case, shouldn't happen normally)
+        // Simulate a mismatch: the stable prompt does not start with
+        // getSystemPrompt (edge case, shouldn't happen normally)
         getSystemPrompt.mockReturnValue("DIFFERENT_SYSTEM_PROMPT");
-        getSystemPromptWithMemory.mockResolvedValue(
+        getStableSystemPrompt.mockReturnValueOnce(
           "Memory\n\nACTUAL_SYSTEM_PROMPT_THAT_DOESNT_MATCH"
         );
 

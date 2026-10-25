@@ -9,6 +9,8 @@ import { loadAndAddChatHistory } from "./utils/chatHistoryUtils";
 import { recordPromptPayload } from "./utils/promptPayloadRecorder";
 import { ThinkBlockStreamer } from "./utils/ThinkBlockStreamer";
 import { getModelKey } from "@/aiParams";
+import { appendVolatileMemory } from "@/memory/memoryPromptUtils";
+import { logPromptCacheDebug } from "./utils/promptCacheDebug";
 
 export class LLMChainRunner extends BaseChainRunner {
   /**
@@ -47,6 +49,11 @@ export class LLMChainRunner extends BaseChainRunner {
     // Add user message (L2+L3+L5 merged)
     const userMessageContent = baseMessages.find((m) => m.role === "user");
     if (userMessageContent) {
+      // Volatile memory belongs to the end of the current turn, not to the
+      // cached system prompt or history.
+      const volatileMemory = await this.chainManager.userMemoryManager.getVolatileMemoryPrompt();
+      const userText = appendVolatileMemory(userMessageContent.content, volatileMemory);
+
       // Handle multimodal content if present (images or files)
       const hasMultimodal =
         userMessage.content &&
@@ -58,14 +65,14 @@ export class LLMChainRunner extends BaseChainRunner {
         const updatedContent = userMessage.content!.map((item: any) => {
           if (item.type === "text") {
             textFound = true;
-            return { ...item, text: userMessageContent.content };
+            return { ...item, text: userText };
           }
           return item;
         });
         if (!textFound) {
           updatedContent.push({
             type: "text",
-            text: userMessageContent.content,
+            text: userText,
           });
         }
         messages.push({
@@ -73,7 +80,7 @@ export class LLMChainRunner extends BaseChainRunner {
           content: updatedContent,
         });
       } else {
-        messages.push(userMessageContent);
+        messages.push({ ...userMessageContent, content: userText });
       }
     }
 
@@ -117,6 +124,7 @@ export class LLMChainRunner extends BaseChainRunner {
       // Record the payload for debugging (includes layered view if envelope available)
       const chatModel = this.chainManager.chatModelManager.getChatModel();
       const modelName = (chatModel as { modelName?: string } | undefined)?.modelName;
+      logPromptCacheDebug(messages, modelName);
       recordPromptPayload({
         messages,
         modelName,
@@ -129,7 +137,8 @@ export class LLMChainRunner extends BaseChainRunner {
       const chatStream = await withSuppressedTokenWarnings(() =>
         this.chainManager.chatModelManager.getChatModel().stream(messages, {
           signal: abortController.signal,
-        })
+          session_id: userMessage.cacheSessionId,
+        } as any)
       );
 
       for await (const chunk of chatStream) {

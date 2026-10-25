@@ -435,14 +435,21 @@ function getTimeRangeMs(timeExpression: string) {
   // Fallback to chrono parser for other date formats
   const parsedDates = chrono.parse(timeExpression, now.toJSDate(), { forwardDate: false });
   if (parsedDates.length > 0) {
-    const start = DateTime.fromJSDate(parsedDates[0].start.date()).startOf("day");
-    const end = parsedDates[0].end
+    let start = DateTime.fromJSDate(parsedDates[0].start.date()).startOf("day");
+    let end = parsedDates[0].end
       ? DateTime.fromJSDate(parsedDates[0].end.date()).endOf("day")
       : start.endOf("day");
 
-    if (start > now) {
-      start.minus({ years: 1 });
-      end.minus({ years: 1 });
+    // A month/day without a year ("December 25") that chrono resolves into the
+    // future should mean the most recent occurrence. Do not roll back relative
+    // expressions ("tomorrow", "next friday") or dates that name a year.
+    // Luxon DateTime is immutable, so the result must be assigned.
+    const hasExplicitYear = /\b(?:19|20)\d{2}\b/.test(timeExpression);
+    const isRelativeExpression =
+      /\b(?:today|tomorrow|yesterday|tonight|now|next|last|this|ago|in)\b/i.test(timeExpression);
+    if (start > now && !hasExplicitYear && !isRelativeExpression) {
+      start = start.minus({ years: 1 });
+      end = end.minus({ years: 1 });
     }
 
     return {

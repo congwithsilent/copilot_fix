@@ -39,6 +39,16 @@ export interface ChatOpenRouterInput extends BaseChatModelParams {
    */
   enablePromptCaching?: boolean;
 
+  /**
+   * Prompt-cache strategy. "auto" detects Claude vs OpenAI from the model id.
+   * Claude uses Anthropic-style `cache_control`; OpenAI relies on automatic
+   * prefix caching plus a sticky-routing session key.
+   */
+  promptCacheStrategy?: "auto" | "anthropic" | "openai" | "off";
+
+  /** Anthropic cache TTL. Defaults to "5m". */
+  promptCacheTtl?: "5m" | "1h";
+
   // All other ChatOpenAI parameters
   modelName?: string;
   apiKey?: string;
@@ -57,6 +67,8 @@ export class ChatOpenRouter extends ChatOpenAI {
   private enableReasoning: boolean;
   private reasoningEffort?: string;
   private enablePromptCaching: boolean;
+  private promptCacheStrategy: "auto" | "anthropic" | "openai" | "off";
+  private promptCacheTtl: "5m" | "1h";
   private openaiClient: OpenAI;
   /** True when the configured baseURL belongs to the OpenRouter gateway. */
   private isOpenRouter: boolean;
@@ -66,6 +78,8 @@ export class ChatOpenRouter extends ChatOpenAI {
       enableReasoning = false,
       reasoningEffort,
       enablePromptCaching = true,
+      promptCacheStrategy = "auto",
+      promptCacheTtl = "5m",
       ...rest
     } = fields;
 
@@ -75,6 +89,8 @@ export class ChatOpenRouter extends ChatOpenAI {
     this.enableReasoning = enableReasoning;
     this.reasoningEffort = reasoningEffort;
     this.enablePromptCaching = enablePromptCaching;
+    this.promptCacheStrategy = promptCacheStrategy;
+    this.promptCacheTtl = promptCacheTtl;
 
     const baseURL = fields.configuration?.baseURL || "https://openrouter.ai/api/v1";
     this.isOpenRouter = baseURL.includes("openrouter.ai");
@@ -90,6 +106,33 @@ export class ChatOpenRouter extends ChatOpenAI {
   }
 
   /**
+   * Rebuild as `ChatOpenRouter`, not plain `ChatOpenAI`.
+   *
+   * `ChatOpenAI.withConfig` hardcodes `new ChatOpenAI(this.fields)`, and
+   * `bindTools()` routes through it. Without this override, tool planning and
+   * agent mode silently lose the OpenRouter-specific fields (reasoning, prompt
+   * caching, and the delta normalization this class performs).
+   *
+   * @param config Call options to attach to the clone.
+   * @returns A new ChatOpenRouter with the same configuration.
+   */
+  override withConfig(config: any): this {
+    const newModel = new ChatOpenRouter({
+      ...(this.fields as ChatOpenRouterInput),
+      enableReasoning: this.enableReasoning,
+      reasoningEffort: this.reasoningEffort,
+      enablePromptCaching: this.enablePromptCaching,
+      promptCacheStrategy: this.promptCacheStrategy,
+      promptCacheTtl: this.promptCacheTtl,
+    });
+    newModel.defaultOptions = {
+      ...this.defaultOptions,
+      ...config,
+    };
+    return newModel as this;
+  }
+
+  /**
    * Override the invocation parameters to include prompt caching and reasoning when enabled.
    *
    * Prompt caching: The `cache_control` field opts Anthropic models (via OpenRouter) into
@@ -102,14 +145,12 @@ export class ChatOpenRouter extends ChatOpenAI {
   override invocationParams(options?: this["ParsedCallOptions"]): any {
     const baseParams = super.invocationParams(options);
 
-    // Only inject cache_control for OpenRouter endpoints. LM Studio, Copilot Plus, and
-    // other OpenAI-compatible backends share this class but reject unknown top-level fields.
-    // Skip caching when enablePromptCaching is false (e.g. for ZDR endpoints that don't
-    // support Anthropic's automatic caching).
-    const withCaching =
-      this.isOpenRouter && this.enablePromptCaching
-        ? { ...baseParams, cache_control: { type: "ephemeral" } }
-        : baseParams;
+    // Only inject OpenRouter-specific cache fields for OpenRouter endpoints.
+    // LM Studio, Copilot Plus, and other OpenAI-compatible backends share this
+    // class but reject unknown top-level fields.
+    const withCaching = this.isOpenRouter
+      ? this.applyPromptCaching(baseParams, options as any)
+      : baseParams;
 
     // Add reasoning parameter if enabled or if reasoningEffort is explicitly specified
     if (this.enableReasoning || this.reasoningEffort) {
@@ -140,6 +181,73 @@ export class ChatOpenRouter extends ChatOpenAI {
   }
 
   /**
+   * Resolve which provider cache policy to apply.
+   *
+   * @returns "anthropic", "openai", or "off".
+   */
+  private resolvePromptCacheStrategy(): "anthropic" | "openai" | "off" {
+    if (!this.enablePromptCaching) {
+      return "off";
+    }
+
+    const configured = this.promptCacheStrategy ?? "auto";
+    if (configured !== "auto") {
+      return configured;
+    }
+
+    const modelName = String(
+      (this as any).fields?.modelName || (this as any).fields?.model || ""
+    ).toLowerCase();
+    if (modelName.includes("claude")) {
+      return "anthropic";
+    }
+    if (modelName.includes("gpt") || /(^|\/)(o1|o3|o4)([-/.]|$)/.test(modelName)) {
+      return "openai";
+    }
+
+    // Preserve the historical default for unknown models.
+    return "anthropic";
+  }
+
+  /**
+   * Add the provider-specific cache fields to the request payload.
+   *
+   * - Anthropic: a top-level `cache_control` breakpoint (automatic caching).
+   * - OpenAI: automatic prefix caching; `prompt_cache_key` doubles as the
+   *   sticky-routing key when `session_id` is not supplied.
+   * - Both: `session_id` keeps requests on the same upstream provider, whose
+   *   cache is the one being reused.
+   *
+   * @param params Base invocation parameters.
+   * @param options Call options, which may carry `session_id` from the runner.
+   * @returns Parameters with cache fields applied.
+   */
+  private applyPromptCaching(params: any, options?: any): any {
+    const strategy = this.resolvePromptCacheStrategy();
+    if (strategy === "off") {
+      return params;
+    }
+
+    const sessionId = typeof options?.session_id === "string" ? options.session_id : undefined;
+    const withSession = sessionId ? { ...params, session_id: sessionId } : params;
+
+    if (strategy === "anthropic") {
+      return {
+        ...withSession,
+        cache_control: {
+          type: "ephemeral",
+          ...(this.promptCacheTtl === "1h" ? { ttl: "1h" } : {}),
+        },
+      };
+    }
+
+    return {
+      ...withSession,
+      ...(sessionId ? { prompt_cache_key: sessionId } : {}),
+    };
+  }
+
+  /**
    * Override to use raw OpenAI SDK to access reasoning_details
    * LangChain filters out reasoning_details, so we bypass it completely
    */
@@ -151,15 +259,21 @@ export class ChatOpenRouter extends ChatOpenAI {
     const params = this.invocationParams(options);
     const openaiMessages = this.toOpenRouterMessages(messages);
 
-    const stream = (await this.openaiClient.chat.completions.create({
-      ...params,
-      messages: openaiMessages,
-      stream: true,
-      stream_options: {
-        ...(params.stream_options ?? {}),
-        include_usage: true,
+    const stream = (await this.openaiClient.chat.completions.create(
+      {
+        ...params,
+        messages: openaiMessages,
+        stream: true,
+        stream_options: {
+          ...(params.stream_options ?? {}),
+          include_usage: true,
+        },
       },
-    })) as unknown as AsyncIterable<OpenRouterChatChunk>;
+      // This override bypasses LangChain's request layer, so the abort signal
+      // has to be forwarded explicitly. Without it, Stop leaves the request
+      // running until the first token (or forever on a stalled stream).
+      { signal: options.signal }
+    )) as unknown as AsyncIterable<OpenRouterChatChunk>;
 
     let usageSummary: OpenRouterUsage | undefined;
 

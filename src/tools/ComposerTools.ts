@@ -4,11 +4,14 @@ import { diffTrimmedLines } from "diff";
 import { ApplyViewResult } from "@/types";
 import { z } from "zod";
 import { createLangChainTool } from "./createLangChainTool";
-import { ensureFolderExists, sanitizeFilePath } from "@/utils";
+import { ensureFolderExists, normalizeVaultPathForWrite, sanitizeFilePath } from "@/utils";
 import { getSettings } from "@/settings/model";
 import { logWarn } from "@/logger";
 
 async function getFile(file_path: string): Promise<TFile> {
+  // Defense in depth: callers normally validate first, but creation is the
+  // operation that must never accept a path outside the vault.
+  file_path = normalizeVaultPathForWrite(file_path);
   let file = app.vault.getAbstractFileByPath(file_path);
   if (file && file instanceof TFile) {
     return file;
@@ -150,6 +153,10 @@ const writeFileTool = createLangChainTool({
       `,
   schema: writeFileSchema,
   func: async ({ path, content, confirmation = true }) => {
+    // Reject paths that escape the vault before anything is created. Runs here
+    // so every downstream consumer (preview state, ApplyView) sees the same
+    // clean path.
+    path = normalizeVaultPathForWrite(path);
     // Sanitize path to prevent ENAMETOOLONG errors on filesystems with 255-byte limits.
     // Must happen here (not just in getFile) so show_preview also receives the sanitized path,
     // since ApplyView uses state.path with its own getFile that doesn't sanitize.
@@ -524,6 +531,7 @@ const editFileTool = createLangChainTool({
   description: `Request to make a targeted change to an existing file by specifying the exact text to find and its replacement. Use this tool for precise, surgical edits to specific parts of a file.`,
   schema: editFileSchema,
   func: async ({ path, oldText, newText }: { path: string; oldText: string; newText: string }) => {
+    path = normalizeVaultPathForWrite(path);
     const sanitizedPath = sanitizeFilePath(path);
     const file = app.vault.getAbstractFileByPath(sanitizedPath);
 

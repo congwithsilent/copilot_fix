@@ -34,6 +34,21 @@ export class ChunkedStorage {
     return `${this.baseDir}/copilot-index-${this.identifier}${LEGACY_INDEX_SUFFIX}`;
   }
 
+  /**
+   * Delete the legacy single-file snapshot.
+   *
+   * `loadDatabase()` prefers the legacy file over partitioned chunks, so a
+   * stale copy left behind after switching `numPartitions` away from 1 makes
+   * every restart load an outdated index (and ignore all later writes). Called
+   * only once the partitioned state has been fully written.
+   */
+  private async removeLegacySnapshot(): Promise<void> {
+    const legacyPath = this.getLegacyPath();
+    if (await this.app.vault.adapter.exists(legacyPath)) {
+      await this.app.vault.adapter.remove(legacyPath);
+    }
+  }
+
   public assignDocumentToPartition(docId: string, totalPartitions: number): number {
     // 1. Convert string to array of characters
     const chars = Array.from(docId); // e.g., "abc" -> ['a', 'b', 'c']
@@ -142,6 +157,7 @@ export class ChunkedStorage {
         const metadataPath = this.getMetadataPath();
         await this.ensureDirectoryExists(metadataPath);
         await this.app.vault.adapter.write(metadataPath, JSON.stringify(metadata));
+        await this.removeLegacySnapshot();
 
         if (getSettings().debug) {
           console.log("Saved empty database state");
@@ -215,6 +231,8 @@ export class ChunkedStorage {
           console.log(`Saved partition ${partitionIndex + 1}/${numPartitions}`);
         }
       }
+      // The partitioned state is complete; a legacy snapshot would shadow it.
+      await this.removeLegacySnapshot();
       if (getSettings().debug) {
         console.log("Saved all partitions");
       }
