@@ -187,7 +187,6 @@ export enum ChatModels {
   GEMINI_3_FLASH_PREVIEW = "gemini-3-flash-preview",
   GEMINI_3_FLASH_LITE_PREVIEW = "gemini-3.1-flash-lite-preview",
   GEMINI_PRO = "gemini-2.5-pro",
-  GEMINI_FLASH = "gemini-2.5-flash",
   CLAUDE_OPUS_4_6 = "claude-opus-4-6",
   CLAUDE_SONNET_4_6 = "claude-sonnet-4-6",
   GROK_4_1_FAST = "grok-4-1-fast",
@@ -196,9 +195,9 @@ export enum ChatModels {
   MISTRAL_TINY = "mistral-tiny-latest",
   DEEPSEEK_REASONER = "deepseek-reasoner",
   DEEPSEEK_CHAT = "deepseek-chat",
+  OPENROUTER_GEMINI_3_8_FLASH = "google/gemini-3.8-flash",
   OPENROUTER_GEMINI_3_FLASH_PREVIEW = "google/gemini-3-flash-preview",
   OPENROUTER_GEMINI_3_PRO_PREVIEW = "google/gemini-3.1-pro-preview",
-  OPENROUTER_GEMINI_2_5_FLASH = "google/gemini-2.5-flash",
   OPENROUTER_GEMINI_2_5_PRO = "google/gemini-2.5-pro",
   OPENROUTER_GPT_5_4 = "openai/gpt-5.4",
   OPENROUTER_GPT_5_MINI = "openai/gpt-5-mini",
@@ -243,23 +242,13 @@ export const MODEL_CAPABILITIES: Record<ModelCapability, string> = {
 export const BUILTIN_CHAT_MODELS: CustomModel[] = [
   // Enabled models first
   {
-    name: ChatModels.COPILOT_PLUS_FLASH,
-    provider: ChatModelProviders.COPILOT_PLUS,
-    enabled: true,
-    isBuiltIn: true,
-    core: true,
-    plusExclusive: true,
-    projectEnabled: false,
-    capabilities: [ModelCapability.VISION],
-  },
-  {
-    name: ChatModels.OPENROUTER_GEMINI_2_5_FLASH,
+    name: ChatModels.OPENROUTER_GEMINI_3_8_FLASH,
     provider: ChatModelProviders.OPENROUTERAI,
     enabled: true,
     isBuiltIn: true,
     core: true,
     projectEnabled: true,
-    capabilities: [ModelCapability.VISION],
+    capabilities: [ModelCapability.VISION, ModelCapability.REASONING],
   },
   {
     name: ChatModels.GPT_5_4,
@@ -286,14 +275,6 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
   },
   {
     name: ChatModels.GEMINI_3_FLASH_LITE_PREVIEW,
-    provider: ChatModelProviders.GOOGLE,
-    enabled: true,
-    isBuiltIn: true,
-    projectEnabled: true,
-    capabilities: [ModelCapability.VISION],
-  },
-  {
-    name: ChatModels.GEMINI_FLASH,
     provider: ChatModelProviders.GOOGLE,
     enabled: true,
     isBuiltIn: true,
@@ -469,36 +450,6 @@ export enum EmbeddingModels {
 
 export const BUILTIN_EMBEDDING_MODELS: CustomModel[] = [
   {
-    name: EmbeddingModels.COPILOT_PLUS_SMALL,
-    provider: EmbeddingModelProviders.COPILOT_PLUS,
-    enabled: true,
-    isBuiltIn: true,
-    isEmbeddingModel: true,
-    core: true,
-    plusExclusive: true,
-  },
-  {
-    name: EmbeddingModels.COPILOT_PLUS_LARGE,
-    provider: EmbeddingModelProviders.COPILOT_PLUS_JINA,
-    enabled: true,
-    isBuiltIn: true,
-    isEmbeddingModel: true,
-    core: true,
-    plusExclusive: true,
-    believerExclusive: true,
-    dimensions: 1024,
-  },
-  {
-    name: EmbeddingModels.COPILOT_PLUS_MULTILINGUAL,
-    provider: EmbeddingModelProviders.COPILOT_PLUS_JINA,
-    enabled: true,
-    isBuiltIn: true,
-    isEmbeddingModel: true,
-    core: true,
-    plusExclusive: true,
-    dimensions: 512,
-  },
-  {
     name: EmbeddingModels.OPENROUTER_OPENAI_EMBEDDING_SMALL,
     provider: EmbeddingModelProviders.OPENROUTERAI,
     enabled: true,
@@ -613,7 +564,7 @@ export const ProviderInfo: Record<Provider, ProviderMetadata> = {
     curlBaseURL: "https://generativelanguage.googleapis.com/v1beta",
     keyManagementURL: "https://makersuite.google.com/app/apikey",
     listModelURL: "https://generativelanguage.googleapis.com/v1beta/models",
-    testModel: ChatModels.GEMINI_FLASH,
+    testModel: ChatModels.GEMINI_3_FLASH_LITE_PREVIEW,
   },
   [ChatModelProviders.ANTHROPIC]: {
     label: "Anthropic",
@@ -902,6 +853,8 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   azureOpenAIApiEmbeddingDeploymentName: "",
   googleApiKey: "",
   openRouterAiApiKey: "",
+  /** Send OpenRouter requests with `service_tier: "flex"` (cheaper, slower). */
+  openRouterFlexTier: false,
   xaiApiKey: "",
   mistralApiKey: "",
   deepseekApiKey: "",
@@ -913,7 +866,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   githubCopilotToken: "",
   githubCopilotTokenExpiresAt: 0,
   defaultChainType: ChainType.LLM_CHAIN,
-  defaultModelKey: ChatModels.OPENROUTER_GEMINI_2_5_FLASH + "|" + ChatModelProviders.OPENROUTERAI,
+  defaultModelKey: ChatModels.OPENROUTER_GEMINI_3_8_FLASH + "|" + ChatModelProviders.OPENROUTERAI,
   embeddingModelKey:
     EmbeddingModels.OPENROUTER_OPENAI_EMBEDDING_SMALL + "|" + EmbeddingModelProviders.OPENROUTERAI,
   temperature: DEFAULT_MODEL_SETTING.TEMPERATURE,

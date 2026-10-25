@@ -49,6 +49,12 @@ export interface ChatOpenRouterInput extends BaseChatModelParams {
   /** Anthropic cache TTL. Defaults to "5m". */
   promptCacheTtl?: "5m" | "1h";
 
+  /**
+   * OpenRouter service tier. "flex" requests the lower-cost, slower endpoints
+   * when the model offers them; "default" leaves routing at standard rates.
+   */
+  serviceTier?: "default" | "flex";
+
   // All other ChatOpenAI parameters
   modelName?: string;
   apiKey?: string;
@@ -69,6 +75,7 @@ export class ChatOpenRouter extends ChatOpenAI {
   private enablePromptCaching: boolean;
   private promptCacheStrategy: "auto" | "anthropic" | "openai" | "off";
   private promptCacheTtl: "5m" | "1h";
+  private serviceTier: "default" | "flex";
   private openaiClient: OpenAI;
   /** True when the configured baseURL belongs to the OpenRouter gateway. */
   private isOpenRouter: boolean;
@@ -80,6 +87,7 @@ export class ChatOpenRouter extends ChatOpenAI {
       enablePromptCaching = true,
       promptCacheStrategy = "auto",
       promptCacheTtl = "5m",
+      serviceTier = "default",
       ...rest
     } = fields;
 
@@ -91,6 +99,7 @@ export class ChatOpenRouter extends ChatOpenAI {
     this.enablePromptCaching = enablePromptCaching;
     this.promptCacheStrategy = promptCacheStrategy;
     this.promptCacheTtl = promptCacheTtl;
+    this.serviceTier = serviceTier;
 
     const baseURL = fields.configuration?.baseURL || "https://openrouter.ai/api/v1";
     this.isOpenRouter = baseURL.includes("openrouter.ai");
@@ -124,6 +133,7 @@ export class ChatOpenRouter extends ChatOpenAI {
       enablePromptCaching: this.enablePromptCaching,
       promptCacheStrategy: this.promptCacheStrategy,
       promptCacheTtl: this.promptCacheTtl,
+      serviceTier: this.serviceTier,
     });
     newModel.defaultOptions = {
       ...this.defaultOptions,
@@ -145,12 +155,18 @@ export class ChatOpenRouter extends ChatOpenAI {
   override invocationParams(options?: this["ParsedCallOptions"]): any {
     const baseParams = super.invocationParams(options);
 
-    // Only inject OpenRouter-specific cache fields for OpenRouter endpoints.
+    // Only inject OpenRouter-specific fields for OpenRouter endpoints.
     // LM Studio, Copilot Plus, and other OpenAI-compatible backends share this
     // class but reject unknown top-level fields.
-    const withCaching = this.isOpenRouter
+    let providerParams = this.isOpenRouter
       ? this.applyPromptCaching(baseParams, options as any)
       : baseParams;
+
+    // Non-default tiers are opt-in. When the model has no flex endpoint,
+    // OpenRouter ignores the hint and routes at standard rates.
+    if (this.isOpenRouter && this.serviceTier === "flex") {
+      providerParams = { ...providerParams, service_tier: "flex" };
+    }
 
     // Add reasoning parameter if enabled or if reasoningEffort is explicitly specified
     if (this.enableReasoning || this.reasoningEffort) {
@@ -160,7 +176,7 @@ export class ChatOpenRouter extends ChatOpenAI {
       if (this.reasoningEffort) {
         logInfo(`OpenRouter reasoning enabled with effort: ${this.reasoningEffort}`);
         return {
-          ...withCaching,
+          ...providerParams,
           reasoning: {
             effort: this.reasoningEffort,
           },
@@ -169,7 +185,7 @@ export class ChatOpenRouter extends ChatOpenAI {
       } else {
         logInfo(`OpenRouter reasoning enabled with max_tokens: 1024`);
         return {
-          ...withCaching,
+          ...providerParams,
           reasoning: {
             max_tokens: 1024,
           },
@@ -177,7 +193,7 @@ export class ChatOpenRouter extends ChatOpenAI {
       }
     }
 
-    return withCaching;
+    return providerParams;
   }
 
   /**

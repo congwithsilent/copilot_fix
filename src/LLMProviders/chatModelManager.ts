@@ -335,6 +335,8 @@ export default class ChatModelManager {
         // applies to Anthropic-style caching (5m default, 1h optional).
         promptCacheStrategy: customModel.promptCacheStrategy ?? "auto",
         promptCacheTtl: customModel.promptCacheTtl ?? "5m",
+        // Global switch: route OpenRouter requests to flex endpoints when offered.
+        serviceTier: settings.openRouterFlexTier ? "flex" : "default",
       },
       [ChatModelProviders.GROQ]: {
         apiKey: await getDecryptedKey(customModel.apiKey || settings.groqApiKey),

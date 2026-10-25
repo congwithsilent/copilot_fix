@@ -1,4 +1,6 @@
 import {
+  BUILTIN_CHAT_MODELS,
+  BUILTIN_EMBEDDING_MODELS,
   COPILOT_FOLDER_ROOT,
   DEFAULT_QA_EXCLUSIONS_SETTING,
   DEFAULT_SYSTEM_PROMPT,
@@ -23,6 +25,29 @@ jest.mock("@/settings/model", () => {
     ...actual,
     getSettings: jest.fn(() => ({ userSystemPrompt: "" })),
   };
+});
+
+describe("built-in model catalog", () => {
+  it("does not ship Copilot Plus or Gemini 2.5 Flash models", () => {
+    const keys = [...BUILTIN_CHAT_MODELS, ...BUILTIN_EMBEDDING_MODELS].map(
+      (model) => `${model.name}|${model.provider}`
+    );
+
+    expect(keys).not.toContain("copilot-plus-flash|copilot-plus");
+    expect(keys).not.toContain("google/gemini-2.5-flash|openrouterai");
+    expect(keys).not.toContain("gemini-2.5-flash|google");
+    expect(keys.some((key) => key.includes("copilot-plus"))).toBe(false);
+  });
+
+  it("keeps the default model in the built-in catalog", () => {
+    const keys = BUILTIN_CHAT_MODELS.map((model) => `${model.name}|${model.provider}`);
+    expect(keys).toContain(DEFAULT_SETTINGS.defaultModelKey);
+  });
+
+  it("ships Gemini 3.8 Flash through OpenRouter", () => {
+    const keys = BUILTIN_CHAT_MODELS.map((model) => `${model.name}|${model.provider}`);
+    expect(keys).toContain("google/gemini-3.8-flash|openrouterai");
+  });
 });
 
 describe("sanitizeQaExclusions", () => {

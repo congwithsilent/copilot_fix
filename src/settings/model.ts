@@ -60,6 +60,8 @@ export interface CopilotSettings {
   azureOpenAIApiEmbeddingDeploymentName: string;
   googleApiKey: string;
   openRouterAiApiKey: string;
+  /** Send OpenRouter requests with `service_tier: "flex"` (cheaper, slower). */
+  openRouterFlexTier: boolean;
   xaiApiKey: string;
   mistralApiKey: string;
   deepseekApiKey: string;
@@ -232,11 +234,32 @@ function resolveEmbeddingModelKey(settings: CopilotSettings): string {
 }
 
 /**
+ * Keep the selected chat model pointing at a model that still exists.
+ *
+ * Removing a built-in model must not leave `defaultModelKey` dangling, which
+ * would otherwise surface as an empty model selector.
+ *
+ * @param settings Settings with merged active models.
+ * @returns A valid chat model key.
+ */
+function resolveDefaultModelKey(settings: CopilotSettings): string {
+  const activeModelKeys = new Set((settings.activeModels || []).map(getModelKeyFromModel));
+
+  if (settings.defaultModelKey && activeModelKeys.has(settings.defaultModelKey)) {
+    return settings.defaultModelKey;
+  }
+
+  const firstEnabled = (settings.activeModels || []).find((model) => model.enabled);
+  return firstEnabled ? getModelKeyFromModel(firstEnabled) : DEFAULT_SETTINGS.defaultModelKey;
+}
+
+/**
  * Sets the settings in the atom.
  */
 export function setSettings(settings: Partial<CopilotSettings>) {
   const newSettings = mergeAllActiveModelsWithCoreModels({ ...getSettings(), ...settings });
   newSettings.embeddingModelKey = resolveEmbeddingModelKey(newSettings);
+  newSettings.defaultModelKey = resolveDefaultModelKey(newSettings);
   settingsStore.set(settingsAtom, newSettings);
 }
 
@@ -477,6 +500,11 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
     sanitizedSettings.passMarkdownImages = DEFAULT_SETTINGS.passMarkdownImages;
   }
 
+  // Ensure openRouterFlexTier has a default value
+  if (typeof sanitizedSettings.openRouterFlexTier !== "boolean") {
+    sanitizedSettings.openRouterFlexTier = DEFAULT_SETTINGS.openRouterFlexTier;
+  }
+
   // Ensure enableInlineCitations has a default value
   if (typeof sanitizedSettings.enableInlineCitations !== "boolean") {
     sanitizedSettings.enableInlineCitations = DEFAULT_SETTINGS.enableInlineCitations;
@@ -649,6 +677,7 @@ function mergeActiveModels(
   builtInModels: CustomModel[]
 ): CustomModel[] {
   const modelMap = new Map<string, CustomModel>();
+  const builtInKeys = new Set(builtInModels.map((model) => getModelKeyFromModel(model)));
 
   // Add core models to the map first
   builtInModels
@@ -657,32 +686,36 @@ function mergeActiveModels(
       modelMap.set(getModelKeyFromModel(model), { ...model });
     });
 
-  // Add or update existing models in the map
-  existingActiveModels.forEach((model) => {
-    const key = getModelKeyFromModel(model);
-    const existingModel = modelMap.get(key);
-    if (existingModel) {
-      // If it's a built-in model, preserve all built-in properties
-      const builtInModel = builtInModels.find(
-        (m) => m.name === model.name && m.provider === model.provider
-      );
-      if (builtInModel) {
-        modelMap.set(key, {
-          ...builtInModel,
-          ...model,
-          isBuiltIn: true,
-          believerExclusive: builtInModel.believerExclusive,
-        });
+  // Add or update existing models in the map. A persisted built-in that no
+  // longer exists upstream is dropped so removed defaults (for example the
+  // Copilot Plus models) disappear from existing installs.
+  existingActiveModels
+    .filter((model) => !model.isBuiltIn || builtInKeys.has(getModelKeyFromModel(model)))
+    .forEach((model) => {
+      const key = getModelKeyFromModel(model);
+      const existingModel = modelMap.get(key);
+      if (existingModel) {
+        // If it's a built-in model, preserve all built-in properties
+        const builtInModel = builtInModels.find(
+          (m) => m.name === model.name && m.provider === model.provider
+        );
+        if (builtInModel) {
+          modelMap.set(key, {
+            ...builtInModel,
+            ...model,
+            isBuiltIn: true,
+            believerExclusive: builtInModel.believerExclusive,
+          });
+        } else {
+          modelMap.set(key, {
+            ...model,
+            isBuiltIn: existingModel.isBuiltIn,
+          });
+        }
       } else {
-        modelMap.set(key, {
-          ...model,
-          isBuiltIn: existingModel.isBuiltIn,
-        });
+        modelMap.set(key, model);
       }
-    } else {
-      modelMap.set(key, model);
-    }
-  });
+    });
 
   return Array.from(modelMap.values());
 }

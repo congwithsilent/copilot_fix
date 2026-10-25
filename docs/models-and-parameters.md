@@ -10,27 +10,25 @@ This guide explains how to manage chat models, embedding models, and the paramet
 
 Copilot comes with a set of built-in models across many providers. Some are always included ("core" models); others can be enabled or disabled.
 
-| Model | Provider | Capabilities |
-|---|---|---|
-| copilot-plus-flash | Copilot Plus | Vision (Plus exclusive) |
-| google/gemini-2.5-flash | OpenRouter | Vision |
-| google/gemini-2.5-pro | OpenRouter | Vision |
+| Model                         | Provider   | Capabilities      |
+| ----------------------------- | ---------- | ----------------- |
+| google/gemini-3.8-flash       | OpenRouter | Vision, Reasoning |
+| google/gemini-2.5-pro         | OpenRouter | Vision            |
 | google/gemini-3-flash-preview | OpenRouter | Vision, Reasoning |
 | google/gemini-3.1-pro-preview | OpenRouter | Vision, Reasoning |
-| openai/gpt-5.4 | OpenRouter | Vision |
-| openai/gpt-5-mini | OpenRouter | Vision |
-| gpt-5.4 | OpenAI | Vision |
-| gpt-5-mini | OpenAI | Vision |
-| gpt-4.1 | OpenAI | Vision |
-| gpt-4.1-mini | OpenAI | Vision |
-| claude-opus-4-6 | Anthropic | Vision, Reasoning |
-| claude-sonnet-4-5-20250929 | Anthropic | Vision, Reasoning |
-| gemini-2.5-pro | Google | Vision |
-| gemini-2.5-flash | Google | Vision |
-| gemini-3-flash-preview | Google | Vision, Reasoning |
-| grok-4-1-fast | XAI | Vision |
-| deepseek-chat | DeepSeek | — |
-| deepseek-reasoner | DeepSeek | Reasoning |
+| openai/gpt-5.4                | OpenRouter | Vision            |
+| openai/gpt-5-mini             | OpenRouter | Vision            |
+| gpt-5.4                       | OpenAI     | Vision            |
+| gpt-5-mini                    | OpenAI     | Vision            |
+| gpt-4.1                       | OpenAI     | Vision            |
+| gpt-4.1-mini                  | OpenAI     | Vision            |
+| claude-opus-4-6               | Anthropic  | Vision, Reasoning |
+| claude-sonnet-4-5-20250929    | Anthropic  | Vision, Reasoning |
+| gemini-2.5-pro                | Google     | Vision            |
+| gemini-3-flash-preview        | Google     | Vision, Reasoning |
+| grok-4-1-fast                 | XAI        | Vision            |
+| deepseek-chat                 | DeepSeek   | —                 |
+| deepseek-reasoner             | DeepSeek   | Reasoning         |
 
 ### Model Capability Badges
 
@@ -75,18 +73,15 @@ Embedding models convert text into numerical vectors, which powers semantic (mea
 
 ### Built-In Embedding Models
 
-| Model | Provider |
-|---|---|
-| copilot-plus-small | Copilot Plus (Plus exclusive) |
-| copilot-plus-large | Copilot Plus (Believer exclusive) |
-| copilot-plus-multilingual | Copilot Plus (Plus exclusive) |
-| openai/text-embedding-3-small | OpenRouter |
-| text-embedding-3-small | OpenAI |
-| text-embedding-3-large | OpenAI |
-| embed-multilingual-light-v3.0 | Cohere |
-| text-embedding-004 | Google |
-| gemini-embedding-001 | Google |
-| Qwen3-Embedding-0.6B | SiliconFlow |
+| Model                         | Provider    |
+| ----------------------------- | ----------- |
+| openai/text-embedding-3-small | OpenRouter  |
+| text-embedding-3-small        | OpenAI      |
+| text-embedding-3-large        | OpenAI      |
+| embed-multilingual-light-v3.0 | Cohere      |
+| text-embedding-004            | Google      |
+| gemini-embedding-001          | Google      |
+| Qwen3-Embedding-0.6B          | SiliconFlow |
 
 ### Selecting an Embedding Model
 
@@ -168,7 +163,20 @@ Reduces the likelihood of the model repeating itself.
 Your **default model** is the one Copilot uses when you open a new chat. Set it in:
 **Settings → Copilot → Basic → Default Chat Model**
 
-The default is **OpenRouter Gemini 2.5 Flash** (requires OpenRouter API key).
+The default is **OpenRouter Gemini 3.8 Flash** (requires OpenRouter API key).
+
+---
+
+## OpenRouter Service Tier
+
+OpenRouter can route a request to a cheaper, slower **flex** endpoint when the
+model offers one. Enable **Settings → Copilot → Models → OpenRouter Flex Tier**
+to add `service_tier: "flex"` to every OpenRouter request.
+
+- Flex endpoints are typically about half the price of standard endpoints.
+- Models without flex endpoints (for example Claude and GPT) are unaffected and
+  continue at standard rates.
+- If you use a model with flex endpoints, expect longer response times.
 
 ---
 

@@ -189,6 +189,13 @@ export const ModelSettings: React.FC = () => {
             value={settings.autoCompactThreshold}
             onChange={(value) => updateSetting("autoCompactThreshold", value)}
           />
+          <SettingItem
+            type="switch"
+            title="OpenRouter Flex Tier"
+            description="Send OpenRouter requests with service_tier: flex. Flex endpoints cost less but respond more slowly. Models without flex endpoints (for example Claude and GPT) are routed at standard rates."
+            checked={settings.openRouterFlexTier}
+            onCheckedChange={(checked) => updateSetting("openRouterFlexTier", checked)}
+          />
         </div>
       </section>
 

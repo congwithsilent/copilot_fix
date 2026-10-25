@@ -15,9 +15,7 @@ Copilot Plus is a subscription that enables:
 - **Web search** — Search the internet from chat
 - **YouTube transcription** — Fetch video transcripts and use them as context
 - **Memory system** — Persistent memory across conversations
-- **Copilot Plus Flash model** — A built-in model that requires no separate API key
 - **URL processing** — Fetch and summarize web pages as context
-- **Copilot Plus embedding models** — High-quality embeddings for semantic search
 
 ### Setting Up Copilot Plus
 
@@ -28,16 +26,11 @@ Copilot Plus is a subscription that enables:
 
 ---
 
-## Copilot Plus Flash Model
+## Copilot Plus Models
 
-**Copilot Plus Flash** is a built-in AI model included with your Copilot Plus subscription:
-
-- No separate API key needed
-- Works out of the box once your license key is active
-- Supports vision (image inputs)
-- Good for general-purpose tasks
-
-It appears as `copilot-plus-flash` in the model selector.
+This build does not ship the Copilot Plus chat or embedding models. Use the
+models available through your own provider keys (for example OpenRouter)
+instead; the Copilot Plus features above still work with those models.
 
 ---
 
@@ -101,7 +94,7 @@ Self-Host Mode lets you replace Copilot's cloud services with your own infrastru
 2. Under **Self-Host Mode**, toggle **Enable Self-Host Mode**
 3. Copilot validates your license. If valid, the toggle activates.
 4. Toggle **Enable Miyo** to use the Miyo desktop app for local search, PDF parsing, and context.
-5. *(Optional)* Set **Custom Miyo Server URL** only if Miyo is running on a remote machine. Leave blank to use automatic local service discovery.
+5. _(Optional)_ Set **Custom Miyo Server URL** only if Miyo is running on a remote machine. Leave blank to use automatic local service discovery.
 
 ### Web Search in Self-Host Mode
 

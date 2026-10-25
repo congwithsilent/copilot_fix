@@ -11,7 +11,13 @@ import {
 } from "@/constants";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import { logError, logInfo } from "@/logger";
-import { getSettings, setSettings, updateSetting, useSettingsValue } from "@/settings/model";
+import {
+  getSettings,
+  getModelKeyFromModel,
+  setSettings,
+  updateSetting,
+  useSettingsValue,
+} from "@/settings/model";
 import { Notice } from "obsidian";
 import React from "react";
 
@@ -338,7 +344,24 @@ export async function refreshSelfHostModeValidation(): Promise<void> {
 export function applyPlusSettings(): void {
   const defaultModelKey = DEFAULT_COPILOT_PLUS_CHAT_MODEL_KEY;
   const embeddingModelKey = DEFAULT_COPILOT_PLUS_EMBEDDING_MODEL_KEY;
-  const previousEmbeddingModelKey = getSettings().embeddingModelKey;
+  const settings = getSettings();
+  const previousEmbeddingModelKey = settings.embeddingModelKey;
+
+  // The Copilot Plus built-ins are no longer shipped, so only switch models
+  // when they are actually present; otherwise leaving a dangling key would
+  // break model selection.
+  const hasPlusChatModel = settings.activeModels.some(
+    (model) => getModelKeyFromModel(model) === defaultModelKey
+  );
+  const hasPlusEmbeddingModel = settings.activeEmbeddingModels.some(
+    (model) => getModelKeyFromModel(model) === embeddingModelKey
+  );
+  if (!hasPlusChatModel || !hasPlusEmbeddingModel) {
+    logInfo(
+      "applyPlusSettings: Copilot Plus models are not available in this build; keeping current model settings."
+    );
+    return;
+  }
 
   logInfo("applyPlusSettings: Changing embedding model", {
     from: previousEmbeddingModelKey,

@@ -109,4 +109,38 @@ describe("ChatOpenRouter", () => {
       expect(params.session_id).toBeUndefined();
     });
   });
+
+  describe("service tier", () => {
+    it("sends service_tier flex when requested", () => {
+      const model = new ChatOpenRouter({
+        modelName: "google/gemini-3.8-flash",
+        apiKey: "test-key",
+        serviceTier: "flex",
+      });
+
+      expect(model.invocationParams().service_tier).toBe("flex");
+    });
+
+    it("does not send service_tier by default", () => {
+      const model = new ChatOpenRouter({
+        modelName: "google/gemini-3.8-flash",
+        apiKey: "test-key",
+      });
+
+      expect(model.invocationParams().service_tier).toBeUndefined();
+    });
+
+    it("keeps the tier alongside reasoning parameters", () => {
+      const model = new ChatOpenRouter({
+        modelName: "google/gemini-3.8-flash",
+        apiKey: "test-key",
+        serviceTier: "flex",
+        reasoningEffort: "low",
+      });
+
+      const params = model.invocationParams();
+      expect(params.service_tier).toBe("flex");
+      expect(params.reasoning).toEqual({ effort: "low" });
+    });
+  });
 });

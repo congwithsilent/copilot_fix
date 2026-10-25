@@ -1,9 +1,4 @@
-import {
-  ChatModelProviders,
-  ChatModels,
-  ProviderSettingsKeyMap,
-  SettingKeyProviders,
-} from "@/constants";
+import { ProviderSettingsKeyMap, SettingKeyProviders } from "@/constants";
 import { getSettings } from "@/settings/model";
 import { CustomModel } from "@/aiParams";
 
@@ -50,10 +45,9 @@ export function getApiKeyForProvider(provider: SettingKeyProviders, model?: Cust
  * Uses a getter function to avoid circular dependency issues.
  */
 function getRequiredModels(): ReadonlyArray<{ name: string; provider: string }> {
-  return [
-    { name: ChatModels.COPILOT_PLUS_FLASH, provider: ChatModelProviders.COPILOT_PLUS },
-    { name: ChatModels.OPENROUTER_GEMINI_2_5_FLASH, provider: ChatModelProviders.OPENROUTERAI },
-  ];
+  // No model is pinned any more: the previous required models were the
+  // Copilot Plus and Gemini 2.5 Flash defaults, which are no longer built in.
+  return [];
 }
 
 /**
