@@ -191,6 +191,13 @@ export interface CustomModel {
   promptCacheStrategy?: "auto" | "anthropic" | "openai" | "off";
   /** Anthropic cache TTL. Defaults to "5m". */
   promptCacheTtl?: "5m" | "1h";
+  /**
+   * Comma-separated OpenRouter endpoint tags to pin (provider.only), for
+   * example "google-ai-studio/flex". Empty lets OpenRouter route freely.
+   */
+  openRouterProviderOnly?: string;
+  /** Whether OpenRouter may fall back to other endpoints. Defaults to true. */
+  openRouterAllowFallbacks?: boolean;
 }
 
 export function setModelKey(modelKey: string) {

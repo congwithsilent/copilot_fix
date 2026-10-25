@@ -55,6 +55,15 @@ export interface ChatOpenRouterInput extends BaseChatModelParams {
    */
   serviceTier?: "default" | "flex";
 
+  /**
+   * Pin specific OpenRouter endpoints (provider.only), e.g.
+   * ["google-ai-studio/flex"]. Empty leaves routing to OpenRouter.
+   */
+  providerOnly?: string[];
+
+  /** Whether OpenRouter may fall back to other endpoints. Defaults to true. */
+  allowFallbacks?: boolean;
+
   // All other ChatOpenAI parameters
   modelName?: string;
   apiKey?: string;
@@ -76,6 +85,8 @@ export class ChatOpenRouter extends ChatOpenAI {
   private promptCacheStrategy: "auto" | "anthropic" | "openai" | "off";
   private promptCacheTtl: "5m" | "1h";
   private serviceTier: "default" | "flex";
+  private providerOnly: string[];
+  private allowFallbacks: boolean;
   private openaiClient: OpenAI;
   /** True when the configured baseURL belongs to the OpenRouter gateway. */
   private isOpenRouter: boolean;
@@ -88,6 +99,8 @@ export class ChatOpenRouter extends ChatOpenAI {
       promptCacheStrategy = "auto",
       promptCacheTtl = "5m",
       serviceTier = "default",
+      providerOnly = [],
+      allowFallbacks = true,
       ...rest
     } = fields;
 
@@ -100,6 +113,8 @@ export class ChatOpenRouter extends ChatOpenAI {
     this.promptCacheStrategy = promptCacheStrategy;
     this.promptCacheTtl = promptCacheTtl;
     this.serviceTier = serviceTier;
+    this.providerOnly = providerOnly;
+    this.allowFallbacks = allowFallbacks;
 
     const baseURL = fields.configuration?.baseURL || "https://openrouter.ai/api/v1";
     this.isOpenRouter = baseURL.includes("openrouter.ai");
@@ -134,6 +149,8 @@ export class ChatOpenRouter extends ChatOpenAI {
       promptCacheStrategy: this.promptCacheStrategy,
       promptCacheTtl: this.promptCacheTtl,
       serviceTier: this.serviceTier,
+      providerOnly: this.providerOnly,
+      allowFallbacks: this.allowFallbacks,
     });
     newModel.defaultOptions = {
       ...this.defaultOptions,
@@ -166,6 +183,18 @@ export class ChatOpenRouter extends ChatOpenAI {
     // OpenRouter ignores the hint and routes at standard rates.
     if (this.isOpenRouter && this.serviceTier === "flex") {
       providerParams = { ...providerParams, service_tier: "flex" };
+    }
+
+    // Pin explicit endpoints when the user configured them. A full endpoint
+    // tag such as "google-ai-studio/flex" selects that provider and tier.
+    if (this.isOpenRouter && this.providerOnly.length > 0) {
+      providerParams = {
+        ...providerParams,
+        provider: {
+          only: [...this.providerOnly],
+          allow_fallbacks: this.allowFallbacks,
+        },
+      };
     }
 
     // Add reasoning parameter if enabled or if reasoningEffort is explicitly specified

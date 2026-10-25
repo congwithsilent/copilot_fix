@@ -48,6 +48,16 @@ describe("built-in model catalog", () => {
     const keys = BUILTIN_CHAT_MODELS.map((model) => `${model.name}|${model.provider}`);
     expect(keys).toContain("google/gemini-3.8-flash|openrouterai");
   });
+
+  it("pins Gemini 3.8 Flash to the Google AI Studio flex endpoint by default", () => {
+    const model = BUILTIN_CHAT_MODELS.find(
+      (candidate) =>
+        candidate.name === "google/gemini-3.8-flash" && candidate.provider === "openrouterai"
+    );
+
+    expect(model?.openRouterProviderOnly).toBe("google-ai-studio/flex");
+    expect(model?.openRouterAllowFallbacks).toBe(false);
+  });
 });
 
 describe("sanitizeQaExclusions", () => {

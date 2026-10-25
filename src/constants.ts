@@ -249,6 +249,10 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     core: true,
     projectEnabled: true,
     capabilities: [ModelCapability.VISION, ModelCapability.REASONING],
+    // Pin the Google AI Studio flex endpoint by default; users can change or
+    // clear this in the model editor.
+    openRouterProviderOnly: "google-ai-studio/flex",
+    openRouterAllowFallbacks: false,
   },
   {
     name: ChatModels.GPT_5_4,

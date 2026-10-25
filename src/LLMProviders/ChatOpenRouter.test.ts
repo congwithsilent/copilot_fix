@@ -143,4 +143,59 @@ describe("ChatOpenRouter", () => {
       expect(params.reasoning).toEqual({ effort: "low" });
     });
   });
+
+  describe("endpoint routing", () => {
+    it("pins an explicit endpoint and disables fallbacks", () => {
+      const model = new ChatOpenRouter({
+        modelName: "google/gemini-3.8-flash",
+        apiKey: "test-key",
+        providerOnly: ["google-ai-studio/flex"],
+        allowFallbacks: false,
+      });
+
+      expect(model.invocationParams().provider).toEqual({
+        only: ["google-ai-studio/flex"],
+        allow_fallbacks: false,
+      });
+    });
+
+    it("allows fallbacks by default when an endpoint is pinned", () => {
+      const model = new ChatOpenRouter({
+        modelName: "google/gemini-3.8-flash",
+        apiKey: "test-key",
+        providerOnly: ["google-ai-studio/flex"],
+      });
+
+      expect(model.invocationParams().provider).toEqual({
+        only: ["google-ai-studio/flex"],
+        allow_fallbacks: true,
+      });
+    });
+
+    it("does not send a provider object when no endpoint is pinned", () => {
+      const model = new ChatOpenRouter({
+        modelName: "google/gemini-3.8-flash",
+        apiKey: "test-key",
+      });
+
+      expect(model.invocationParams().provider).toBeUndefined();
+    });
+
+    it("combines an endpoint pin with the flex service tier", () => {
+      const model = new ChatOpenRouter({
+        modelName: "google/gemini-3.8-flash",
+        apiKey: "test-key",
+        serviceTier: "flex",
+        providerOnly: ["google-ai-studio/flex"],
+        allowFallbacks: false,
+      });
+
+      const params = model.invocationParams();
+      expect(params.service_tier).toBe("flex");
+      expect(params.provider).toEqual({
+        only: ["google-ai-studio/flex"],
+        allow_fallbacks: false,
+      });
+    });
+  });
 });

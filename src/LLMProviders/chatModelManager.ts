@@ -337,6 +337,14 @@ export default class ChatModelManager {
         promptCacheTtl: customModel.promptCacheTtl ?? "5m",
         // Global switch: route OpenRouter requests to flex endpoints when offered.
         serviceTier: settings.openRouterFlexTier ? "flex" : "default",
+        // Optional endpoint pinning (provider.only), e.g. "google-ai-studio/flex".
+        providerOnly: customModel.openRouterProviderOnly
+          ? customModel.openRouterProviderOnly
+              .split(",")
+              .map((endpoint) => endpoint.trim())
+              .filter(Boolean)
+          : [],
+        allowFallbacks: customModel.openRouterAllowFallbacks ?? true,
       },
       [ChatModelProviders.GROQ]: {
         apiKey: await getDecryptedKey(customModel.apiKey || settings.groqApiKey),

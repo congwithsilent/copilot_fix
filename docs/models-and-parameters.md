@@ -167,7 +167,7 @@ The default is **OpenRouter Gemini 3.8 Flash** (requires OpenRouter API key).
 
 ---
 
-## OpenRouter Service Tier
+## OpenRouter Service Tier and Endpoints
 
 OpenRouter can route a request to a cheaper, slower **flex** endpoint when the
 model offers one. Enable **Settings → Copilot → Models → OpenRouter Flex Tier**
@@ -177,6 +177,29 @@ to add `service_tier: "flex"` to every OpenRouter request.
 - Models without flex endpoints (for example Claude and GPT) are unaffected and
   continue at standard rates.
 - If you use a model with flex endpoints, expect longer response times.
+
+### Pinning a specific endpoint
+
+Different endpoints for the same model can behave very differently. To pin one,
+open the model in **Settings → Copilot → Models → edit**, and fill in
+**OpenRouter Endpoint(s)** with one or more endpoint tags from OpenRouter's
+endpoints API:
+
+- `google-ai-studio/flex` — Google AI Studio flex endpoint
+- `google-vertex/global/flex` — Google Vertex flex endpoint
+
+Separate multiple tags with commas. This sends `provider.only` with the listed
+endpoints.
+
+**Allow fallbacks** controls `provider.allow_fallbacks`:
+
+- On (default) — if the pinned endpoint is unavailable, OpenRouter may try
+  another one.
+- Off — the request fails instead of routing elsewhere.
+
+The built-in `google/gemini-3.8-flash` model ships pinned to
+`google-ai-studio/flex` with fallbacks disabled. Clear the field to let
+OpenRouter choose again.
 
 ---
 

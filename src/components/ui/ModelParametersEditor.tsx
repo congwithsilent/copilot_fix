@@ -1,6 +1,7 @@
 import React from "react";
 import { CustomModel } from "@/aiParams";
 import { FormField } from "@/components/ui/form-field";
+import { Input } from "@/components/ui/input";
 import { ParameterControl } from "@/components/ui/parameter-controls";
 import { SettingSwitch } from "@/components/ui/setting-switch";
 import { Label } from "@/components/ui/label";
@@ -314,6 +315,47 @@ export function ModelParametersEditor({
               Explicitly disable deep thinking / reasoning in the request payload (sends{" "}
               <code>thinking: &#123; type: &quot;disabled&quot; &#125;</code>) for compatible models
               (e.g. Ark / 火山方舟, Kimi, etc.).
+            </div>
+          </div>
+        </FormField>
+      )}
+      {/* OpenRouter endpoint routing */}
+      {model.provider === ChatModelProviders.OPENROUTERAI && (
+        <FormField>
+          <div className="tw-space-y-3">
+            <div className="tw-space-y-1.5">
+              <Label htmlFor="openrouter-provider-only" className="tw-text-sm tw-font-medium">
+                OpenRouter Endpoint(s)
+              </Label>
+              <Input
+                id="openrouter-provider-only"
+                type="text"
+                placeholder="google-ai-studio/flex"
+                value={model.openRouterProviderOnly ?? ""}
+                onChange={(e) => onChange("openRouterProviderOnly", e.target.value)}
+              />
+              <div className="tw-pr-12 tw-text-xs tw-leading-relaxed tw-text-muted">
+                Comma-separated endpoint tags from OpenRouter&apos;s endpoints API (sends{" "}
+                <code>provider.only</code>). For example <code>google-ai-studio/flex</code> or{" "}
+                <code>google-vertex/global/flex</code>. Leave empty to let OpenRouter choose.
+              </div>
+            </div>
+            <div className="tw-flex tw-items-center tw-justify-between">
+              <div>
+                <Label htmlFor="openrouter-allow-fallbacks" className="tw-text-sm tw-font-medium">
+                  Allow fallbacks
+                </Label>
+                <div className="tw-pr-12 tw-text-xs tw-leading-relaxed tw-text-muted">
+                  When disabled, the request fails instead of routing to another endpoint (
+                  <code>provider.allow_fallbacks: false</code>). Only applies when an endpoint is
+                  specified above.
+                </div>
+              </div>
+              <SettingSwitch
+                id="openrouter-allow-fallbacks"
+                checked={model.openRouterAllowFallbacks ?? true}
+                onCheckedChange={(checked) => onChange("openRouterAllowFallbacks", checked)}
+              />
             </div>
           </div>
         </FormField>
