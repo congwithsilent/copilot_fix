@@ -30,6 +30,7 @@ import { ThinkBlockStreamer } from "./utils/ThinkBlockStreamer";
 import { getModelKey } from "@/aiParams";
 import { appendVolatileMemory } from "@/memory/memoryPromptUtils";
 import { logPromptCacheDebug } from "./utils/promptCacheDebug";
+import { isPdfPageImage, materializePdfPageImages } from "@/utils/pdfPageContext";
 
 export class VaultQAChainRunner extends BaseChainRunner {
   async run(
@@ -199,7 +200,9 @@ export class VaultQAChainRunner extends BaseChainRunner {
       // LayerToMessagesConverter already handles smart referencing:
       // - Items in L2 → referenced by ID
       // - Items NOT in L2 → full content
-      const userMessageContent = baseMessages.find((m) => m.role === "user");
+      const userMessageContent =
+        baseMessages.find((m) => m.role === "user") ??
+        (userMessage.content?.some(isPdfPageImage) ? { role: "user", content: "" } : undefined);
       if (userMessageContent) {
         // Prepend RAG results and citations to user content with proper separator,
         // then append volatile memory at the end of the turn.
@@ -227,7 +230,7 @@ export class VaultQAChainRunner extends BaseChainRunner {
           }
           messages.push({
             role: "user",
-            content: updatedContent,
+            content: materializePdfPageImages(updatedContent),
           });
         } else {
           messages.push({

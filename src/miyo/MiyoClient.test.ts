@@ -1,4 +1,3 @@
-import { getDecryptedKey } from "@/encryptionService";
 import { logInfo } from "@/logger";
 import { MiyoClient } from "@/miyo/MiyoClient";
 import { MiyoServiceDiscovery } from "@/miyo/MiyoServiceDiscovery";
@@ -11,10 +10,6 @@ jest.mock("obsidian", () => ({
 
 jest.mock("@/settings/model", () => ({
   getSettings: jest.fn(),
-}));
-
-jest.mock("@/encryptionService", () => ({
-  getDecryptedKey: jest.fn(async (value: string) => value),
 }));
 
 const mockResolveBaseUrl = jest.fn();
@@ -38,15 +33,12 @@ describe("MiyoClient", () => {
   const mockedGetSettings = getSettings as jest.MockedFunction<typeof getSettings>;
   const mockedGetInstance = MiyoServiceDiscovery.getInstance as unknown as jest.Mock;
   const mockedLogInfo = logInfo as jest.MockedFunction<typeof logInfo>;
-  const mockedGetDecryptedKey = getDecryptedKey as jest.MockedFunction<typeof getDecryptedKey>;
 
   beforeEach(() => {
     jest.clearAllMocks();
     mockedGetSettings.mockReturnValue({
-      plusLicenseKey: "plus-test-license",
       debug: false,
     } as any);
-    mockedGetDecryptedKey.mockResolvedValue("plus-test-license");
     mockResolveBaseUrl.mockResolvedValue("http://127.0.0.1:8742");
     mockedGetInstance.mockReturnValue({
       resolveBaseUrl: mockResolveBaseUrl,
@@ -80,9 +72,7 @@ describe("MiyoClient", () => {
       expect.objectContaining({
         url: "http://127.0.0.1:8742/v0/parse-doc",
         method: "POST",
-        headers: {
-          Authorization: "Bearer plus-test-license",
-        },
+        headers: {},
         contentType: "application/json",
         body: JSON.stringify({ folder_name: "TestVault", path: "docs/sample.pdf" }),
       })
@@ -92,7 +82,7 @@ describe("MiyoClient", () => {
       expect.objectContaining({
         method: "POST",
         url: "http://127.0.0.1:8742/v0/parse-doc",
-        hasAuthorizationHeader: true,
+        hasAuthorizationHeader: false,
       })
     );
   });

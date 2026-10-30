@@ -23,8 +23,6 @@ export const ModelSettings: React.FC = () => {
         "isBuiltIn",
         "core",
         "projectEnabled",
-        "plusExclusive",
-        "believerExclusive",
         "capabilities",
         "displayName",
         "dimensions",

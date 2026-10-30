@@ -62,7 +62,7 @@ interface LexicalEditorProps {
   onEditorReady?: (editor: any) => void;
   onImagePaste?: (files: File[]) => void;
   onTagSelected?: () => void;
-  isCopilotPlus?: boolean;
+  includeExtendedFiles?: boolean;
   currentActiveFile?: TFile | null;
   currentChain?: ChainType;
 }
@@ -91,7 +91,7 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
   onEditorReady,
   onImagePaste,
   onTagSelected,
-  isCopilotPlus = false,
+  includeExtendedFiles = false,
   currentActiveFile = null,
   currentChain,
 }) => {
@@ -206,12 +206,15 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
           <PillDeletionPlugin />
           <PastePlugin enableURLPills={!!onURLsChange} onImagePaste={onImagePaste} />
           <SlashCommandPlugin />
-          <NoteCommandPlugin isCopilotPlus={isCopilotPlus} currentActiveFile={currentActiveFile} />
+          <NoteCommandPlugin
+            includeExtendedFiles={includeExtendedFiles}
+            currentActiveFile={currentActiveFile}
+          />
           {currentChain && currentChain !== ChainType.LLM_CHAIN && (
             <TagCommandPlugin onTagSelected={onTagSelected} />
           )}
           <AtMentionCommandPlugin
-            isCopilotPlus={isCopilotPlus}
+            includeExtendedFiles={includeExtendedFiles}
             currentActiveFile={currentActiveFile}
           />
           <TextInsertionPlugin />

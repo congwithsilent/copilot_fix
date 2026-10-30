@@ -6,7 +6,7 @@ import { escapeXml } from "@/LLMProviders/chainRunner/utils/xmlParsing";
 import { getWebViewerService } from "@/services/webViewerService/webViewerServiceSingleton";
 import { WebViewerTimeoutError } from "@/services/webViewerService/webViewerServiceTypes";
 import { FileParserManager } from "@/tools/FileParserManager";
-import { isPlusChain, isTextReadableFile } from "@/utils";
+import { isProjectChain, isTextReadableFile } from "@/utils";
 import { normalizeUrlString } from "@/utils/urlNormalization";
 import { TFile, Vault, Notice } from "obsidian";
 import {
@@ -274,7 +274,7 @@ export class ContextProcessor {
 
     content = await this.processEmbeddedNotes(content, note, vault, fileParserManager, chainType);
 
-    if (isPlusChain(chainType)) {
+    if (isProjectChain(chainType)) {
       content = await this.processEmbeddedPDFs(content, vault, fileParserManager);
     }
 
@@ -375,7 +375,7 @@ export class ContextProcessor {
         embeddedContent = segment.content;
       }
 
-      if (isPlusChain(chainType)) {
+      if (isProjectChain(chainType)) {
         embeddedContent = await this.processEmbeddedPDFs(embeddedContent, vault, fileParserManager);
       }
 
@@ -581,15 +581,15 @@ export class ContextProcessor {
           return;
         }
 
-        if (!isPlusChain(currentChain) && !isTextReadableFile(note)) {
+        if (!isProjectChain(currentChain) && !isTextReadableFile(note)) {
           // This file type is supported, but requires Plus mode (e.g., EPUB, DOCX)
-          logWarn(`File type ${note.extension} requires Copilot Plus mode for context processing.`);
+          logWarn(`File type ${note.extension} requires Project mode for context processing.`);
           // Show user-facing notice about the restriction
           new Notice(RESTRICTION_MESSAGES.NON_MARKDOWN_FILES_RESTRICTED);
           return;
         }
 
-        // 3. If we reach here, parse the file (md, canvas, or other supported type in Plus mode)
+        // 3. If we reach here, parse the file (md, canvas, or other supported type in Project mode)
         let content =
           note.extension === "md"
             ? await this.buildMarkdownContextContent(note, vault, fileParserManager, currentChain)

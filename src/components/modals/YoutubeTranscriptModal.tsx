@@ -1,4 +1,4 @@
-import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
+import { selfHostYoutube4llm } from "@/LLMProviders/selfHostServices";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { logError } from "@/logger";
@@ -61,7 +61,7 @@ function YoutubeTranscriptModalContent({ onClose }: { onClose: () => void }) {
     setError("");
 
     try {
-      const response = await BrevilabsClient.getInstance().youtube4llm(url);
+      const response = await selfHostYoutube4llm(url);
 
       if (!response.response.transcript) {
         throw new Error(

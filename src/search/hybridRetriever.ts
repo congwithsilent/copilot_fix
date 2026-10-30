@@ -1,5 +1,4 @@
 // DEPRECATED: Legacy hybrid retriever backed by Orama. Replaced by v3 TieredLexicalRetriever + MemoryIndexManager.
-import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import EmbeddingManager from "@/LLMProviders/embeddingManager";
 import { logInfo } from "@/logger";
 import VectorStoreManager from "@/search/vectorStoreManager";
@@ -21,7 +20,6 @@ export class HybridRetriever extends BaseRetriever {
       timeRange?: { startTime: number; endTime: number };
       textWeight?: number;
       returnAll?: boolean;
-      useRerankerThreshold?: number; // reranking API is only called with this set
     }
   ) {
     super();
@@ -48,7 +46,7 @@ export class HybridRetriever extends BaseRetriever {
 
       const combinedChunks = this.filterAndFormatChunks(oramaChunks, explicitChunks);
 
-      let finalChunks = combinedChunks;
+      const finalChunks = combinedChunks;
 
       // Add check for empty array
       if (combinedChunks.length === 0) {
@@ -58,48 +56,11 @@ export class HybridRetriever extends BaseRetriever {
         return finalChunks;
       }
 
-      const maxOramaScore = combinedChunks.reduce((max, chunk) => {
-        const score = chunk.metadata.score;
-        const isValidScore = typeof score === "number" && !isNaN(score);
-        return isValidScore ? Math.max(max, score) : max;
-      }, 0);
-
-      const allScoresAreNaN = combinedChunks.every(
-        (chunk) => typeof chunk.metadata.score !== "number" || isNaN(chunk.metadata.score)
-      );
-
-      const shouldRerank =
-        this.options.useRerankerThreshold &&
-        (maxOramaScore < this.options.useRerankerThreshold || allScoresAreNaN);
-      // Apply reranking if max score is below the threshold or all scores are NaN
-      if (shouldRerank) {
-        const rerankResponse = await BrevilabsClient.getInstance().rerank(
-          query,
-          // Limit the context length to 3000 characters to avoid overflowing the reranker
-          combinedChunks.map((doc) => doc.pageContent.slice(0, 3000))
-        );
-
-        // Map chunks based on reranked scores and include rerank_score in metadata
-        finalChunks = rerankResponse.response.data.map((item) => ({
-          ...combinedChunks[item.index],
-          metadata: {
-            ...combinedChunks[item.index].metadata,
-            rerank_score: item.relevance_score,
-          },
-        }));
-      }
-
       if (getSettings().debug) {
         console.log("*** HYBRID RETRIEVER DEBUG INFO: ***");
         console.log("\nExplicit Chunks: ", explicitChunks);
         console.log("Orama Chunks: ", oramaChunks);
         console.log("Combined Chunks: ", combinedChunks);
-        console.log("Max Orama Score: ", maxOramaScore);
-        if (shouldRerank) {
-          console.log("Reranked Chunks: ", finalChunks);
-        } else {
-          console.log("No reranking applied.");
-        }
       }
 
       return finalChunks;

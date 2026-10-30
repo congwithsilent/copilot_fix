@@ -11,6 +11,7 @@ import { ThinkBlockStreamer } from "./utils/ThinkBlockStreamer";
 import { getModelKey } from "@/aiParams";
 import { appendVolatileMemory } from "@/memory/memoryPromptUtils";
 import { logPromptCacheDebug } from "./utils/promptCacheDebug";
+import { isPdfPageImage, materializePdfPageImages } from "@/utils/pdfPageContext";
 
 export class LLMChainRunner extends BaseChainRunner {
   /**
@@ -47,7 +48,9 @@ export class LLMChainRunner extends BaseChainRunner {
     await loadAndAddChatHistory(memory, messages);
 
     // Add user message (L2+L3+L5 merged)
-    const userMessageContent = baseMessages.find((m) => m.role === "user");
+    const userMessageContent =
+      baseMessages.find((m) => m.role === "user") ??
+      (userMessage.content?.some(isPdfPageImage) ? { role: "user", content: "" } : undefined);
     if (userMessageContent) {
       // Volatile memory belongs to the end of the current turn, not to the
       // cached system prompt or history.
@@ -77,7 +80,7 @@ export class LLMChainRunner extends BaseChainRunner {
         }
         messages.push({
           role: "user",
-          content: updatedContent,
+          content: materializePdfPageImages(updatedContent),
         });
       } else {
         messages.push({ ...userMessageContent, content: userText });

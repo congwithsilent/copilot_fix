@@ -1,8 +1,6 @@
 # Agent Mode and Tools
 
-Copilot Plus includes an **autonomous agent** that can reason step-by-step and decide which tools to use to answer your question. Instead of you specifying every step, the agent figures out what to do on its own.
-
-This feature requires a [Copilot Plus](copilot-plus-and-self-host.md) license.
+Copilot includes an **autonomous agent** that can reason step-by-step and decide which tools to use to answer your question. Instead of you specifying every step, the agent figures out what to do on its own.
 
 ---
 
@@ -21,10 +19,10 @@ When the autonomous agent is enabled, Copilot can:
 
 ## Enabling Agent Mode
 
-1. Go to **Settings → Copilot → Plus**
+1. Go to **Settings → Copilot → Agent**
 2. Turn on **Enable Autonomous Agent**
 
-The agent activates automatically when you're in **Copilot Plus** mode. You don't need to do anything special — just ask your question.
+The agent runs in regular **Chat** mode. You can also toggle it per-conversation with the **Agent** button next to the chat input, then just ask your question.
 
 ### Max Iterations
 
@@ -32,7 +30,7 @@ The agent works in iteration cycles (think → use a tool → think → use a to
 
 - **Default**: 4 iterations
 - **Maximum**: 16 iterations
-- **Setting**: **Settings → Copilot → Plus → Autonomous Agent Max Iterations**
+- **Setting**: **Settings → Copilot → Agent → Autonomous Agent Max Iterations**
 
 The agent also has a maximum runtime of 5 minutes per response, regardless of iteration count.
 
@@ -40,35 +38,43 @@ The agent also has a maximum runtime of 5 minutes per response, regardless of it
 
 ## Available Tools
 
-Copilot Plus has 13 built-in tools. Some are always active; others can be enabled or disabled.
+Copilot has 13 built-in tools. Some are always active; others can be enabled or disabled.
 
 ### Always-Enabled Tools
 
 These tools are always available and cannot be disabled:
 
 #### Get Current Time
+
 Gets the current time in any timezone. Useful for time-aware queries like "what should I do today?"
 
 #### Get Time Range
+
 Converts natural time expressions (like "last week" or "yesterday") into exact date ranges. Usually called automatically before a time-based vault search.
 
 #### Get Time Info
+
 Converts an epoch timestamp to a human-readable date and time.
 
 #### Convert Timezones
+
 Converts a time from one timezone to another. Ask: "What time is 3pm EST in Tokyo?"
 
 #### Read Note
+
 Reads the content of a specific note. The agent uses this to inspect a note it found via search, or that you mentioned explicitly. Works on large notes by reading them in chunks.
 
 #### File Tree
+
 Browses the file structure of your vault. The agent uses this to find folder paths before creating new notes or to count files in a folder.
 
 #### Tag List
+
 Lists all tags in your vault with usage statistics. Useful for tag reorganization or finding notes by tag patterns.
 
 #### Update Memory
-Saves information to your memory when you explicitly ask the AI to remember something. See [Copilot Plus and Self-Host](copilot-plus-and-self-host.md#memory-system) for details.
+
+Saves information to your memory when you explicitly ask the AI to remember something. See [Agent & Self-Host](self-host.md#memory-system) for details.
 
 > **Requires**: **Settings → Copilot → Plus → Reference Saved Memories** must be enabled. If this setting is off, the tool is not registered and memory commands will not work.
 
@@ -77,25 +83,29 @@ Saves information to your memory when you explicitly ask the AI to remember some
 These tools can be individually enabled or disabled in **Settings → Copilot → Plus → Tool Settings**:
 
 #### Vault Search
+
 Searches your vault notes by content. The agent uses this to find notes relevant to your question.
 
 - **Trigger**: Automatically for vault-related questions, or explicitly with `@vault`
 - **Uses**: Both semantic search (if enabled) and lexical search
 
 #### Web Search
+
 Searches the internet for current information.
 
 - **Trigger**: Automatically when your question implies web/online content, or explicitly with `@websearch` or `@web`
 - **Requires**: A web search service configured (Firecrawl or Perplexity in self-host mode, or handled by Plus)
 
 #### Write to File
+
 Creates a new note or overwrites an existing one entirely.
 
-- **Trigger**: Automatically for "create a note" requests, or explicitly with `@composer` (available in both Copilot Plus and Projects mode)
+- **Trigger**: Automatically for "create a note" requests, or explicitly with `@composer` (available in both Chat and Projects mode)
 - **Behavior**: Shows a preview of the content before writing. You can review and accept or reject the change.
 - **Auto-accept**: Enable **Settings → Copilot → Plus → Auto-accept edits** to skip the preview
 
 #### Replace in File
+
 Makes targeted changes to an existing note using search-and-replace blocks.
 
 - **Use case**: Small edits (adding a bullet, updating a section) — more precise than rewriting the whole note
@@ -103,6 +113,7 @@ Makes targeted changes to an existing note using search-and-replace blocks.
 - **Auto-accept**: Same setting as Write to File
 
 #### YouTube Transcription
+
 Fetches the transcript of a YouTube video.
 
 - **Trigger**: Automatically when you paste a YouTube URL in your message
@@ -114,6 +125,7 @@ Fetches the transcript of a YouTube video.
 ## Tool Settings
 
 Go to **Settings → Copilot → Plus → Tool Settings** to:
+
 - See all available tools
 - Enable or disable individual configurable tools
 - View what each tool does
@@ -138,6 +150,7 @@ See [Context and Mentions](context-and-mentions.md) for the full @-mention refer
 ## Tool Call Indicators
 
 While the agent is working, the chat shows status indicators for each tool call:
+
 - "Reading files"
 - "Searching the web"
 - "Reading file tree"
@@ -157,6 +170,7 @@ When the agent uses **Write to File** or **Replace in File**, it shows a preview
 You can choose your preferred diff view in **Settings → Copilot → Plus → Diff View Mode**.
 
 Review the proposed change and click:
+
 - **Accept** — Apply the change to your note
 - **Reject** — Discard without making any changes
 - **Revert** — Undo a change that was already accepted
@@ -169,6 +183,6 @@ If you trust the agent and don't want to review every file change, enable **Auto
 
 ## Related
 
-- [Copilot Plus and Self-Host](copilot-plus-and-self-host.md) — Licensing and memory
+- [Agent & Self-Host](self-host.md) — Memory system and self-host integrations
 - [Vault Search and Indexing](vault-search-and-indexing.md) — How vault search works
 - [Context and Mentions](context-and-mentions.md) — @-mention triggers for tools

@@ -3,6 +3,11 @@ jest.mock("./MessageRepository");
 jest.mock("@/LLMProviders/chatModelManager");
 jest.mock("./ContextCompactor");
 jest.mock("./ContextManager");
+jest.mock("@/services/pdfPageContextService", () => ({
+  renderPdfPageRange: jest.fn(),
+  getPdfPageCount: jest.fn(),
+  getOpenPdfPage: jest.fn(),
+}));
 jest.mock("@/logger", () => ({
   logInfo: jest.fn(),
   logWarn: jest.fn(),
@@ -15,7 +20,6 @@ jest.mock("@/chatUtils", () => ({
 jest.mock("@/chainFactory", () => ({
   ChainType: {
     LLM_CHAIN: "llm_chain",
-    COPILOT_PLUS_CHAIN: "copilot_plus_chain",
     PROJECT_CHAIN: "project_chain",
   },
 }));
@@ -28,7 +32,7 @@ jest.mock("./ChatPersistenceManager", () => ({
 
 jest.mock("@/aiParams", () => ({
   getCurrentProject: jest.fn().mockReturnValue(null),
-  getChainType: jest.fn().mockReturnValue("copilot_plus_chain"),
+  getChainType: jest.fn().mockReturnValue("project"),
 }));
 
 jest.mock("@/LLMProviders/projectManager", () => {
@@ -77,6 +81,7 @@ import { ChainType } from "@/chainFactory";
 import { getWebViewerService } from "@/services/webViewerService/webViewerServiceSingleton";
 import { ChatMessage, MessageContext } from "@/types/message";
 import { TFile } from "obsidian";
+import { renderPdfPageRange } from "@/services/pdfPageContextService";
 
 const USER_SENDER = "user";
 const createContextResult = (content = "Hello with context") => ({
@@ -166,6 +171,60 @@ describe("ChatManager", () => {
   });
 
   describe("sendMessage", () => {
+    it("sends only the selected PDF pages as images and snapshots the range", async () => {
+      const file = Object.assign(Object.create(TFile.prototype), {
+        path: "paper.pdf",
+        name: "paper.pdf",
+        extension: "pdf",
+      });
+      const range = { startPage: 10, endPage: 12 };
+      const context: MessageContext = {
+        notes: [file, file],
+        urls: [],
+        pdfPageRanges: { "paper.pdf": range },
+      };
+      const images = [10, 11, 12].map((page) => ({
+        type: "image_url",
+        image_url: { url: `data:image/jpeg;base64,page${page}` },
+        pdfPage: { path: "paper.pdf", page },
+      }));
+      (renderPdfPageRange as jest.Mock).mockResolvedValue(images);
+      mockPlugin.app.vault = {};
+      mockMessageRepo.addMessage.mockReturnValue("pdf-msg");
+      mockMessageRepo.getMessage.mockReturnValue(
+        createMockMessage("pdf-msg", "Explain", USER_SENDER)
+      );
+      mockContextManager.processMessageContext.mockResolvedValue(createContextResult());
+
+      await chatManager.sendMessage("Explain", context, ChainType.LLM_CHAIN);
+
+      expect(renderPdfPageRange).toHaveBeenCalledTimes(1);
+      expect(renderPdfPageRange).toHaveBeenCalledWith(mockPlugin.app.vault, file, range, undefined);
+      const savedContext = mockMessageRepo.addMessage.mock.calls[0][3] as MessageContext;
+      const content = mockMessageRepo.addMessage.mock.calls[0][4];
+      expect(content).toEqual([...images, { type: "text", text: "Explain" }]);
+      expect(content!.some((part) => part.type === "file")).toBe(false);
+      range.startPage = 1;
+      expect(savedContext.pdfPageRanges!["paper.pdf"].startPage).toBe(10);
+    });
+
+    it("does not create a message after a PDF rendering failure", async () => {
+      const file = Object.assign(Object.create(TFile.prototype), {
+        path: "broken.pdf",
+        extension: "pdf",
+      });
+      (renderPdfPageRange as jest.Mock).mockRejectedValueOnce(new Error("Failed to render page 3"));
+      const context: MessageContext = {
+        notes: [file],
+        urls: [],
+        pdfPageRanges: { "broken.pdf": { startPage: 1, endPage: 3 } },
+      };
+      await expect(
+        chatManager.sendMessage("Explain", context, ChainType.LLM_CHAIN)
+      ).rejects.toThrow("Failed to render page 3");
+      expect(mockMessageRepo.addMessage).not.toHaveBeenCalled();
+    });
+
     it("should send a message with basic context", async () => {
       const mockActiveFile = { path: "active.md", basename: "active" } as TFile;
       const mockMessage = createMockMessage("msg-1", "Hello", USER_SENDER);
@@ -338,6 +397,37 @@ describe("ChatManager", () => {
   });
 
   describe("regenerateMessage", () => {
+    it("restores saved PDF ranges as images for regeneration", async () => {
+      const file = Object.assign(Object.create(TFile.prototype), {
+        path: "paper.pdf",
+        extension: "pdf",
+      });
+      const user = createMockMessage("user-pdf", "Explain", USER_SENDER);
+      const ai = createMockMessage("ai-pdf", "Answer", "AI");
+      const range = { startPage: 4, endPage: 5 };
+      const llm: ChatMessage = {
+        ...user,
+        contextEnvelope: { layers: [] } as any,
+        context: { notes: [file], urls: [], pdfPageRanges: { "paper.pdf": range } },
+      };
+      const pages = [
+        {
+          type: "image_url",
+          image_url: { url: "data:image/jpeg;base64,page" },
+          pdfPage: { path: file.path, page: 4 },
+        },
+      ];
+      mockPlugin.app.vault = { getAbstractFileByPath: jest.fn().mockReturnValue(file) };
+      mockMessageRepo.getMessage.mockReturnValue(ai);
+      mockMessageRepo.getDisplayMessages.mockReturnValue([user, ai]);
+      mockMessageRepo.getLLMMessage.mockReturnValue(llm);
+      (renderPdfPageRange as jest.Mock).mockResolvedValue(pages);
+
+      expect(await chatManager.regenerateMessage("ai-pdf", jest.fn(), jest.fn())).toBe(true);
+      expect(renderPdfPageRange).toHaveBeenCalledWith(mockPlugin.app.vault, file, range);
+      expect(mockChainManager.runChain.mock.calls[0][0].content).toEqual(pages);
+    });
+
     it("should regenerate AI message successfully", async () => {
       const mockAiMessage = createMockMessage("msg-2", "AI response", "AI");
       const mockUserMessage = createMockMessage("msg-1", "Hello", USER_SENDER);
@@ -404,7 +494,7 @@ describe("ChatManager", () => {
         expect.anything(), // messageRepo
         expect.anything(), // fileParserManager
         undefined, // vault (undefined in mock)
-        "copilot_plus_chain", // chainType
+        "project", // chainType
         false, // includeActiveNote
         undefined, // activeNote
         "Test system prompt", // systemPrompt

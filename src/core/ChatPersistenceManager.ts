@@ -307,6 +307,13 @@ export class ChatPersistenceManager {
             contextParts.push(`URLs: ${message.context.urls.join(", ")}`);
           }
 
+          if (Object.keys(message.context.pdfPageRanges || {}).length > 0) {
+            // Encoding avoids delimiters in file paths breaking the context line.
+            contextParts.push(
+              `PDF Pages: ${encodeURIComponent(JSON.stringify(message.context.pdfPageRanges))}`
+            );
+          }
+
           if (message.context.webTabs?.length) {
             contextParts.push(
               `Web Tabs: ${message.context.webTabs.map((tab) => tab.url).join(", ")}`
@@ -488,6 +495,24 @@ export class ChatPersistenceManager {
             })
             .filter((note): note is TFile => note !== null);
         }
+      } else if (trimmed.startsWith("PDF Pages: ")) {
+        try {
+          const ranges: unknown = JSON.parse(decodeURIComponent(trimmed.substring(11)));
+          if (ranges && typeof ranges === "object" && !Array.isArray(ranges)) {
+            context.pdfPageRanges = Object.fromEntries(
+              Object.entries(ranges).filter(
+                ([, range]) =>
+                  range &&
+                  Number.isSafeInteger(range.startPage) &&
+                  Number.isSafeInteger(range.endPage) &&
+                  range.startPage >= 1 &&
+                  range.endPage >= range.startPage
+              )
+            );
+          }
+        } catch {
+          logWarn("[ChatPersistenceManager] Ignoring malformed PDF page ranges");
+        }
       } else if (trimmed.startsWith("URLs: ")) {
         const urlsStr = trimmed.substring(6); // Remove "URLs: "
         if (urlsStr) {
@@ -523,6 +548,7 @@ export class ChatPersistenceManager {
       context.urls.length > 0 ||
       context.tags.length > 0 ||
       context.folders.length > 0 ||
+      Object.keys(context.pdfPageRanges || {}).length > 0 ||
       context.webTabs.length > 0
     ) {
       return context;

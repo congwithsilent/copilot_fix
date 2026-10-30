@@ -47,7 +47,6 @@ export interface LegacyCommandSettings {
 
 export interface CopilotSettings {
   userId: string;
-  plusLicenseKey: string;
   openAIApiKey: string;
   openAIOrgId: string;
   huggingfaceApiKey: string;
@@ -120,8 +119,6 @@ export interface CopilotSettings {
   showRelevantNotes: boolean;
   numPartitions: number;
   defaultConversationNoteName: string;
-  // undefined means never checked
-  isPlusUser: boolean | undefined;
   inlineEditCommands: LegacyCommandSettings[] | undefined;
   projectList: Array<ProjectConfig>;
   passMarkdownImages: boolean;
@@ -135,10 +132,6 @@ export interface CopilotSettings {
   enableMiyo: boolean;
   /** When true, omit folder_name from Miyo search requests so all indexed content is searched */
   miyoSearchAll: boolean;
-  /** Timestamp of last successful Believer validation for self-host mode (null if never validated) */
-  selfHostModeValidatedAt: number | null;
-  /** Count of successful periodic validations (3 = permanently valid) */
-  selfHostValidationCount: number;
   /** URL endpoint for the self-host mode backend */
   selfHostUrl: string;
   /** API key for the self-host mode backend (if required) */
@@ -401,6 +394,17 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   delete sanitizedSettingsRecord.miyoRemoteVaultPath;
   delete sanitizedSettingsRecord.miyoVaultName;
   delete sanitizedSettingsRecord.enableMiyoSearch;
+
+  // Migration: Copilot Plus was removed from this fork. Drop the subscription
+  // fields so they disappear from data.json and fall back to regular chat when
+  // the persisted default chain was the Plus mode.
+  delete sanitizedSettingsRecord.isPlusUser;
+  delete sanitizedSettingsRecord.plusLicenseKey;
+  delete sanitizedSettingsRecord.selfHostModeValidatedAt;
+  delete sanitizedSettingsRecord.selfHostValidationCount;
+  if ((sanitizedSettingsRecord.defaultChainType as string) === "copilot_plus") {
+    sanitizedSettings.defaultChainType = DEFAULT_SETTINGS.defaultChainType;
+  }
 
   // Migration: Rename self-hosted search settings to self-host mode (v3.2.0+)
   if (
@@ -704,7 +708,6 @@ function mergeActiveModels(
             ...builtInModel,
             ...model,
             isBuiltIn: true,
-            believerExclusive: builtInModel.believerExclusive,
           });
         } else {
           modelMap.set(key, {

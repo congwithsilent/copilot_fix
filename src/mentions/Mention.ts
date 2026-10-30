@@ -1,13 +1,7 @@
 import { ImageProcessor } from "@/imageProcessing/imageProcessor";
-import {
-  BrevilabsClient,
-  Twitter4llmResponse,
-  Url4llmResponse,
-} from "@/LLMProviders/brevilabsClient";
-import { selfHostYoutube4llm } from "@/LLMProviders/selfHostServices";
+import { isSelfHostEnabled, selfHostYoutube4llm } from "@/LLMProviders/selfHostServices";
 import { err2String, isTwitterUrl, isYoutubeUrl } from "@/utils";
 import { logError } from "@/logger";
-import { isSelfHostModeValid } from "@/plusUtils";
 import { getSettings } from "@/settings/model";
 
 export interface MentionData {
@@ -20,11 +14,9 @@ export interface MentionData {
 export class Mention {
   private static instance: Mention;
   private mentions: Map<string, MentionData>;
-  private brevilabsClient: BrevilabsClient;
 
   private constructor() {
     this.mentions = new Map();
-    this.brevilabsClient = BrevilabsClient.getInstance();
   }
 
   static getInstance(): Mention {
@@ -49,22 +41,26 @@ export class Mention {
       .filter((url, index, self) => self.indexOf(url) === index);
   }
 
-  async processUrl(url: string): Promise<Url4llmResponse & { error?: string }> {
-    try {
-      return await this.brevilabsClient.url4llm(url);
-    } catch (error) {
-      const msg = err2String(error);
-      logError(`Error processing URL ${url}: ${msg}`);
-      return { response: url, elapsed_time_ms: 0, error: msg };
-    }
+  /**
+   * Regular URLs have no extraction backend in this build; surface a clear
+   * error instead of silently dropping the URL.
+   */
+  async processUrl(url: string): Promise<{ response: string; error?: string }> {
+    return {
+      response: url,
+      error: "URL content extraction is not available",
+    };
   }
 
   async processYoutubeUrl(url: string): Promise<{ transcript: string; error?: string }> {
+    if (!(isSelfHostEnabled() && getSettings().supadataApiKey)) {
+      return {
+        transcript: "",
+        error: "YouTube transcripts require a Supadata API key in settings",
+      };
+    }
     try {
-      const response =
-        isSelfHostModeValid() && getSettings().supadataApiKey
-          ? await selfHostYoutube4llm(url)
-          : await this.brevilabsClient.youtube4llm(url);
+      const response = await selfHostYoutube4llm(url);
       return { transcript: response.response.transcript };
     } catch (error) {
       const msg = err2String(error);
@@ -73,14 +69,15 @@ export class Mention {
     }
   }
 
-  async processTwitterUrl(url: string): Promise<Twitter4llmResponse & { error?: string }> {
-    try {
-      return await this.brevilabsClient.twitter4llm(url);
-    } catch (error) {
-      const msg = err2String(error);
-      logError(`Error processing Twitter URL ${url}: ${msg}`);
-      return { response: url, elapsed_time_ms: 0, error: msg };
-    }
+  /**
+   * Twitter/X URLs have no extraction backend in this build; surface a clear
+   * error instead of silently dropping the URL.
+   */
+  async processTwitterUrl(url: string): Promise<{ response: string; error?: string }> {
+    return {
+      response: url,
+      error: "Twitter content extraction is not available",
+    };
   }
 
   /**

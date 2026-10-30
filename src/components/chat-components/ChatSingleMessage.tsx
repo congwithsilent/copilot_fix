@@ -1196,9 +1196,18 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
             } else if (item.type === "image_url") {
               return (
                 <div key={index} className="message-image-content">
+                  {item.pdfPage && (
+                    <div className="tw-text-xs tw-text-muted">
+                      {item.pdfPage.path} · Page {item.pdfPage.page}
+                    </div>
+                  )}
                   <img
                     src={item.image_url.url}
-                    alt="User uploaded image"
+                    alt={
+                      item.pdfPage
+                        ? `${item.pdfPage.path}, page ${item.pdfPage.page}`
+                        : "User uploaded image"
+                    }
                     className="chat-message-image"
                   />
                 </div>

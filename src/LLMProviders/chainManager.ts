@@ -10,7 +10,6 @@ import { BUILTIN_CHAT_MODELS, USER_SENDER } from "@/constants";
 import {
   AutonomousAgentChainRunner,
   ChainRunner,
-  CopilotPlusChainRunner,
   LLMChainRunner,
   ProjectChainRunner,
   VaultQAChainRunner,
@@ -251,20 +250,6 @@ export default class ChainManager {
         break;
       }
 
-      case ChainType.COPILOT_PLUS_CHAIN: {
-        // For initial load of the plugin
-        await this.initializeQAChain(options);
-        this.chain = ChainFactory.createNewLLMChain({
-          llm: chatModel,
-          memory: memory,
-          prompt: options.prompt || chatPrompt,
-          abortController: options.abortController,
-        }) as RunnableSequence;
-
-        setChainType(ChainType.COPILOT_PLUS_CHAIN);
-        break;
-      }
-
       case ChainType.PROJECT_CHAIN: {
         // For initial load of the plugin
         await this.initializeQAChain(options);
@@ -290,15 +275,13 @@ export default class ChainManager {
 
     switch (chainType) {
       case ChainType.LLM_CHAIN:
-        return new LLMChainRunner(this);
-      case ChainType.VAULT_QA_CHAIN:
-        return new VaultQAChainRunner(this);
-      case ChainType.COPILOT_PLUS_CHAIN:
-        // Use AutonomousAgentChainRunner if the setting is enabled
+        // Use AutonomousAgentChainRunner when the agent toggle is enabled
         if (settings.enableAutonomousAgent) {
           return new AutonomousAgentChainRunner(this);
         }
-        return new CopilotPlusChainRunner(this);
+        return new LLMChainRunner(this);
+      case ChainType.VAULT_QA_CHAIN:
+        return new VaultQAChainRunner(this);
       case ChainType.PROJECT_CHAIN:
         return new ProjectChainRunner(this);
       default:

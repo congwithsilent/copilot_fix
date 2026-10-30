@@ -79,7 +79,6 @@ export class MergedSemanticRetriever extends BaseRetriever {
         timeRange: options.timeRange,
         textWeight: options.textWeight,
         returnAll: this.returnAll,
-        useRerankerThreshold: options.useRerankerThreshold,
       });
   }
 

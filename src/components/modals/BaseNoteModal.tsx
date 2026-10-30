@@ -7,7 +7,7 @@ export abstract class BaseNoteModal<T> extends FuzzySuggestModal<T> {
   protected availableNotes: T[];
   protected chainType: ChainType;
 
-  constructor(app: App, chainType: ChainType = ChainType.COPILOT_PLUS_CHAIN) {
+  constructor(app: App, chainType: ChainType = ChainType.PROJECT_CHAIN) {
     super(app);
     this.activeNote = app.workspace.getActiveFile();
     this.chainType = chainType;

@@ -21,7 +21,7 @@ export class AddContextNoteModal extends BaseNoteModal<TFile> {
     onNoteSelect,
     excludeNotePaths,
     titleOnly = false,
-    chainType = ChainType.COPILOT_PLUS_CHAIN,
+    chainType = ChainType.PROJECT_CHAIN,
   }: AddContextNoteModalProps) {
     super(app, chainType);
     this.onNoteSelect = onNoteSelect;

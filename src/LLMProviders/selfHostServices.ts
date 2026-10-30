@@ -1,7 +1,12 @@
-import { type Youtube4llmResponse } from "@/LLMProviders/brevilabsClient";
 import { getDecryptedKey } from "@/encryptionService";
 import { logError, logInfo } from "@/logger";
 import { getSettings } from "@/settings/model";
+
+/** YouTube transcript result shape used across transcript consumers. */
+export interface Youtube4llmResponse {
+  response: { transcript: string };
+  elapsed_time_ms: number;
+}
 
 const FIRECRAWL_SEARCH_URL = "https://api.firecrawl.dev/v2/search";
 const PERPLEXITY_CHAT_URL = "https://api.perplexity.ai/chat/completions";
@@ -16,6 +21,17 @@ const SUPADATA_POLL_TIMEOUT = 60000;
 export interface SelfHostWebSearchResult {
   content: string;
   citations: string[];
+}
+
+/**
+ * Whether self-host integrations are enabled.
+ *
+ * Pure local toggle: when on, web search, YouTube transcripts, document
+ * parsing, and retrieval use the user's own API keys and backends. The
+ * relevant API key or URL must still be configured for each integration.
+ */
+export function isSelfHostEnabled(): boolean {
+  return getSettings().enableSelfHostMode === true;
 }
 
 interface FirecrawlSearchResult {
@@ -136,7 +152,7 @@ export async function selfHostWebSearch(query: string): Promise<SelfHostWebSearc
 
 /**
  * YouTube transcript via Supadata direct API (self-host mode).
- * Returns the same Youtube4llmResponse shape as BrevilabsClient.youtube4llm().
+ * Fetches a YouTube transcript via the Supadata API.
  */
 export async function selfHostYoutube4llm(url: string): Promise<Youtube4llmResponse> {
   const startTime = Date.now();

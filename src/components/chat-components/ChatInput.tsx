@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { ModelSelector } from "@/components/ui/ModelSelector";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { ChatToolControls } from "./ChatToolControls";
-import { isPlusChain } from "@/utils";
+import { isToolEnhancedChain } from "@/utils";
 import {
   mergeWebTabContexts,
   normalizeUrlString,
@@ -20,7 +20,9 @@ import {
 } from "@/utils/urlNormalization";
 
 import { useSettingsValue } from "@/settings/model";
-import { SelectedTextContext, WebTabContext } from "@/types/message";
+import { PdfPageRange, SelectedTextContext, WebTabContext } from "@/types/message";
+import { validatePdfPageRange } from "@/utils/pdfPageContext";
+import { PdfPageRangeControl } from "./PdfPageRangeControl";
 import { isAllowedFileForNoteContext } from "@/utils";
 import { ArrowUp, Image, Loader2, StopCircle, X } from "lucide-react";
 import { App, Notice, TFile } from "obsidian";
@@ -46,6 +48,7 @@ interface ChatInputProps {
     contextNotes?: TFile[];
     contextFolders?: string[];
     webTabs?: WebTabContext[];
+    pdfPageRanges?: Record<string, PdfPageRange>;
   }) => void;
   isGenerating: boolean;
   /** Current generation stage label, such as "Reading files". */
@@ -183,11 +186,37 @@ const ChatInput: React.FC<ChatInputProps> = ({
   });
   const [selectedProject, setSelectedProject] = useState<ProjectConfig | null>(null);
   const [notesFromPills, setNotesFromPills] = useState<{ path: string; basename: string }[]>([]);
+  const [pdfPageRanges, setPdfPageRanges] = useState<Record<string, PdfPageRange>>({});
+  const [pdfPageCounts, setPdfPageCounts] = useState<Record<string, number>>({});
+  const handlePdfPageCount = useCallback((path: string, count: number) => {
+    setPdfPageCounts((previous) => ({ ...previous, [path]: count }));
+  }, []);
+  const handlePdfRangeChange = useCallback((path: string, range: PdfPageRange) => {
+    setPdfPageRanges((previous) => ({ ...previous, [path]: range }));
+  }, []);
+  const pdfContextFiles = useMemo(() => {
+    const files = new Map(contextNotes.map((file) => [file.path, file]));
+    for (const note of notesFromPills) {
+      const file = app.vault.getAbstractFileByPath(note.path);
+      if (file instanceof TFile) files.set(file.path, file);
+    }
+    if (includeActiveNote && !selectedTextContexts?.length && currentActiveNote) {
+      files.set(currentActiveNote.path, currentActiveNote);
+    }
+    return [...files.values()].filter((file) => file.extension.toLowerCase() === "pdf");
+  }, [
+    app.vault,
+    contextNotes,
+    notesFromPills,
+    includeActiveNote,
+    selectedTextContexts,
+    currentActiveNote,
+  ]);
   const [urlsFromPills, setUrlsFromPills] = useState<string[]>([]);
   const [foldersFromPills, setFoldersFromPills] = useState<string[]>([]);
   const [toolsFromPills, setToolsFromPills] = useState<string[]>([]);
   const [webTabsFromPills, setWebTabsFromPills] = useState<WebTabContext[]>([]);
-  const isCopilotPlus = isPlusChain(currentChain);
+  const isToolEnhanced = isToolEnhancedChain(currentChain);
 
   // Merge badge-only contextWebTabs with pills-derived webTabsFromPills for display
   // Uses shared normalization policy from urlNormalization.ts
@@ -317,7 +346,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
   };
 
   const onSendMessage = () => {
-    if (isProjectLoading) return;
+    if (isGenerating || isProjectLoading) return;
 
     // Combine badge-only folders with the send-time Lexical snapshot of Folder pills.
     // This avoids React state synchronization races when the user sends quickly.
@@ -346,6 +375,28 @@ const ChatInput: React.FC<ChatInputProps> = ({
       return;
     }
 
+    const pdfFiles = new Map(
+      allNotes
+        .filter((file) => file.extension.toLowerCase() === "pdf")
+        .map((file) => [file.path, file])
+    );
+    for (const file of pdfContextFiles) pdfFiles.set(file.path, file);
+    const selectedPdfRanges: Record<string, PdfPageRange> = {};
+    for (const file of pdfFiles.values()) {
+      const range = pdfPageRanges[file.path];
+      if (!range || !pdfPageCounts[file.path]) {
+        new Notice(`Choose the PDF page range for ${file.name} before sending.`);
+        return;
+      }
+      try {
+        validatePdfPageRange(range, pdfPageCounts[file.path]);
+      } catch (error) {
+        new Notice(`${file.name}: ${(error as Error).message}`);
+        return;
+      }
+      selectedPdfRanges[file.path] = { ...range };
+    }
+
     // Build tool calls based on toggle states
     const toolCalls: string[] = [];
     // Only add tool calls when autonomous agent is off
@@ -367,10 +418,13 @@ const ChatInput: React.FC<ChatInputProps> = ({
 
     handleSendMessage({
       toolCalls,
-      contextNotes: allNotes,
+      contextNotes: Array.from(
+        new Map([...allNotes, ...pdfFiles.values()].map((file) => [file.path, file])).values()
+      ),
       urls: contextUrls,
       contextFolders: allFolders,
       webTabs: allWebTabs,
+      pdfPageRanges: selectedPdfRanges,
     });
   };
 
@@ -402,7 +456,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
 
   // Handle when tools are removed from pills (when pills are deleted in editor)
   const handleToolPillsRemoved = (removedTools: string[]) => {
-    if (!isCopilotPlus || autonomousAgentToggle) return;
+    if (!isToolEnhanced || autonomousAgentToggle) return;
 
     // Update tool button states based on removed pills
     removedTools.forEach((tool) => {
@@ -423,7 +477,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
 
   // Sync tool button states with tool pills
   useEffect(() => {
-    if (!isCopilotPlus || autonomousAgentToggle) return;
+    if (!isToolEnhanced || autonomousAgentToggle) return;
 
     // Update button states based on current tool pills
     const hasVault = toolsFromPills.includes("@vault");
@@ -433,7 +487,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
     setVaultToggle(hasVault);
     setWebToggle(hasWeb);
     setComposerToggle(hasComposer);
-  }, [toolsFromPills, isCopilotPlus, autonomousAgentToggle]);
+  }, [toolsFromPills, isToolEnhanced, autonomousAgentToggle]);
 
   // Handle when context notes are removed from the context menu
   // This should remove all corresponding pills from the editor
@@ -675,7 +729,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
 
   // URL pill-to-context synchronization (when URL pills are added) - only for Plus chains
   useEffect(() => {
-    if (isPlusChain(currentChain)) {
+    if (isToolEnhancedChain(currentChain)) {
       setContextUrls((prev) => {
         const contextUrlSet = new Set(prev);
 
@@ -759,29 +813,29 @@ const ChatInput: React.FC<ChatInputProps> = ({
 
   // Handle tool button toggle-off events - remove corresponding pills
   const handleVaultToggleOff = useCallback(() => {
-    if (lexicalEditorRef.current && isCopilotPlus) {
+    if (lexicalEditorRef.current && isToolEnhanced) {
       lexicalEditorRef.current.update(() => {
         $removePillsByToolName("@vault");
       });
     }
-  }, [isCopilotPlus]);
+  }, [isToolEnhanced]);
 
   const handleWebToggleOff = useCallback(() => {
-    if (lexicalEditorRef.current && isCopilotPlus) {
+    if (lexicalEditorRef.current && isToolEnhanced) {
       lexicalEditorRef.current.update(() => {
         $removePillsByToolName("@websearch");
         $removePillsByToolName("@web");
       });
     }
-  }, [isCopilotPlus]);
+  }, [isToolEnhanced]);
 
   const handleComposerToggleOff = useCallback(() => {
-    if (lexicalEditorRef.current && isCopilotPlus) {
+    if (lexicalEditorRef.current && isToolEnhanced) {
       lexicalEditorRef.current.update(() => {
         $removePillsByToolName("@composer");
       });
     }
-  }, [isCopilotPlus]);
+  }, [isToolEnhanced]);
 
   // Active note pill sync callbacks
   const handleActiveNoteAdded = useCallback(() => {
@@ -804,11 +858,11 @@ const ChatInput: React.FC<ChatInputProps> = ({
 
   // Handle tag selection from typeahead - auto-enable vault search
   const handleTagSelected = useCallback(() => {
-    if (isCopilotPlus && !autonomousAgentToggle && !vaultToggle) {
+    if (isToolEnhanced && !autonomousAgentToggle && !vaultToggle) {
       setVaultToggle(true);
       new Notice("Vault search enabled for tag query");
     }
-  }, [isCopilotPlus, autonomousAgentToggle, vaultToggle]);
+  }, [isToolEnhanced, autonomousAgentToggle, vaultToggle]);
 
   return (
     <div
@@ -852,6 +906,19 @@ const ChatInput: React.FC<ChatInputProps> = ({
         </div>
       )}
 
+      {!editMode &&
+        pdfContextFiles.map((file) => (
+          <PdfPageRangeControl
+            key={file.path}
+            app={app}
+            file={file}
+            range={pdfPageRanges[file.path]}
+            disabled={isGenerating}
+            onChange={handlePdfRangeChange}
+            onPageCount={handlePdfPageCount}
+          />
+        ))}
+
       <div className="tw-relative">
         {isProjectLoading && (
           <div className="tw-absolute tw-inset-0 tw-z-modal tw-flex tw-items-center tw-justify-center tw-bg-primary tw-opacity-80 tw-backdrop-blur-sm">
@@ -869,10 +936,10 @@ const ChatInput: React.FC<ChatInputProps> = ({
           onNotesRemoved={handleNotePillsRemoved}
           onActiveNoteAdded={handleActiveNoteAdded}
           onActiveNoteRemoved={handleActiveNoteRemoved}
-          onURLsChange={isCopilotPlus ? setUrlsFromPills : undefined}
-          onURLsRemoved={isCopilotPlus ? handleURLPillsRemoved : undefined}
-          onToolsChange={isCopilotPlus ? setToolsFromPills : undefined}
-          onToolsRemoved={isCopilotPlus ? handleToolPillsRemoved : undefined}
+          onURLsChange={isToolEnhanced ? setUrlsFromPills : undefined}
+          onURLsRemoved={isToolEnhanced ? handleURLPillsRemoved : undefined}
+          onToolsChange={isToolEnhanced ? setToolsFromPills : undefined}
+          onToolsRemoved={isToolEnhanced ? handleToolPillsRemoved : undefined}
           onFoldersChange={setFoldersFromPills}
           onFoldersRemoved={handleFolderPillsRemoved}
           onWebTabsChange={setWebTabsFromPills}
@@ -883,7 +950,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
           onTagSelected={handleTagSelected}
           placeholder={"Ask a question… @ for context, / for prompts"}
           disabled={isProjectLoading}
-          isCopilotPlus={isCopilotPlus}
+          includeExtendedFiles={isToolEnhanced}
           currentActiveFile={currentActiveNote}
           currentChain={currentChain}
         />

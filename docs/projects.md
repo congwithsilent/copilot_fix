@@ -128,4 +128,4 @@ As an alpha feature, projects have some known limitations:
 - [Chat Interface](chat-interface.md) — Chat modes overview, new chat behavior, history
 - [System Prompts](system-prompts.md) — Custom system prompts for projects
 - [Context and Mentions](context-and-mentions.md) — How context works
-- [Copilot Plus and Self-Host](copilot-plus-and-self-host.md) — Plus features
+- [Agent & Self-Host](self-host.md) — Memory system and self-host integrations

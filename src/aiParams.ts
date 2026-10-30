@@ -160,8 +160,6 @@ export interface CustomModel {
   enablePromptCaching?: boolean;
 
   projectEnabled?: boolean;
-  plusExclusive?: boolean;
-  believerExclusive?: boolean;
   capabilities?: ModelCapability[];
   displayName?: string;
 

@@ -18,12 +18,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { SettingSwitch } from "@/components/ui/setting-switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { PLUS_UTM_MEDIUMS } from "@/constants";
 import { logError } from "@/logger";
 import { shouldUseMiyo } from "@/miyo/miyoUtils";
-import { navigateToPlusPage, useIsPlusUser } from "@/plusUtils";
 import { updateSetting, useSettingsValue } from "@/settings/model";
-import { Docs4LLMParser } from "@/tools/FileParserManager";
 import { isRateLimitError } from "@/utils/rateLimitUtils";
 import { DropdownMenu, DropdownMenuTrigger } from "@radix-ui/react-dropdown-menu";
 import {
@@ -38,7 +35,6 @@ import {
   MoreHorizontal,
   RefreshCw,
   Sparkles,
-  SquareArrowOutUpRight,
 } from "lucide-react";
 import { Notice } from "obsidian";
 import React from "react";
@@ -159,9 +155,6 @@ export async function forceRebuildCurrentProjectContext() {
         );
 
         // Step 1: Completely clear all cached data for this project (in-memory and on-disk)
-        // Reset rate limit notice timer to allow showing notices during force rebuild
-        Docs4LLMParser.resetRateLimitNoticeTimer();
-
         await ProjectContextCache.getInstance().clearForProject(currentProject);
         new Notice(`Cache for project "${currentProject.name}" has been cleared.`);
 
@@ -228,7 +221,6 @@ export function ChatControls({
   const settings = useSettingsValue();
   const [selectedChain, setSelectedChain] = useChainType();
   const [currentProject] = useCurrentProject();
-  const isPlusUser = useIsPlusUser();
 
   const handleModeChange = async (chainType: ChainType) => {
     // If leaving project mode with autosave enabled, save chat BEFORE clearing project context
@@ -258,9 +250,7 @@ export function ChatControls({
       ? currentProject?.name || "Projects"
       : selectedChain === ChainType.VAULT_QA_CHAIN
         ? "Vault QA"
-        : selectedChain === ChainType.COPILOT_PLUS_CHAIN
-          ? "Copilot Plus"
-          : "Chat";
+        : "Chat";
 
   return (
     <div className="copilot-chat-header tw-flex tw-w-full tw-items-center tw-justify-between tw-gap-1 tw-px-2 tw-py-1.5 tw-@container/chat-header">
@@ -273,9 +263,6 @@ export function ChatControls({
               className="tw-max-w-full tw-gap-1.5 tw-rounded-md tw-px-2 tw-py-1 tw-text-sm tw-font-semibold tw-text-normal"
               aria-label="Switch conversation mode or project"
             >
-              {selectedChain === ChainType.COPILOT_PLUS_CHAIN && (
-                <Sparkles className="tw-size-4 tw-text-accent" />
-              )}
               {selectedChain === ChainType.PROJECT_CHAIN && (
                 <LibraryBig className="tw-size-4 tw-text-accent" />
               )}
@@ -293,65 +280,32 @@ export function ChatControls({
             <DropdownMenuItem onSelect={() => handleModeChange(ChainType.VAULT_QA_CHAIN)}>
               Vault QA
             </DropdownMenuItem>
-            {isPlusUser ? (
-              <DropdownMenuItem onSelect={() => handleModeChange(ChainType.COPILOT_PLUS_CHAIN)}>
-                <Sparkles className="tw-size-4 tw-text-accent" />
-                Copilot Plus
-              </DropdownMenuItem>
-            ) : (
-              <DropdownMenuItem
-                onSelect={() => {
-                  navigateToPlusPage(PLUS_UTM_MEDIUMS.CHAT_MODE_SELECT);
-                  onCloseProject?.();
-                }}
-              >
-                <Sparkles className="tw-size-4" />
-                Copilot Plus
-                <SquareArrowOutUpRight className="tw-ml-auto tw-size-3" />
-              </DropdownMenuItem>
-            )}
 
             <DropdownMenuSeparator className="tw-bg-secondary-alt" />
             <DropdownMenuLabel className="tw-text-xs tw-font-normal tw-text-muted">
               Workspaces
             </DropdownMenuLabel>
-            {isPlusUser ? (
-              <>
-                <div className="tw-max-h-64 tw-overflow-y-auto">
-                  {(settings.projectList ?? []).map((project) => {
-                    const isCurrentProject =
-                      selectedChain === ChainType.PROJECT_CHAIN &&
-                      currentProject?.id === project.id;
-                    return (
-                      <DropdownMenuItem
-                        key={project.id}
-                        onSelect={() => handleProjectSelection(project)}
-                        className="tw-flex tw-items-center"
-                        aria-current={isCurrentProject ? "true" : undefined}
-                      >
-                        <LibraryBig className="tw-size-4 tw-text-muted" />
-                        <span className="tw-min-w-0 tw-flex-1 tw-truncate">{project.name}</span>
-                        {isCurrentProject && <CheckCircle className="tw-size-3.5 tw-text-accent" />}
-                      </DropdownMenuItem>
-                    );
-                  })}
-                </div>
-                <DropdownMenuItem onSelect={() => handleModeChange(ChainType.PROJECT_CHAIN)}>
-                  {(settings.projectList ?? []).length > 0 ? "Manage projects" : "Open projects"}
-                </DropdownMenuItem>
-              </>
-            ) : (
-              <DropdownMenuItem
-                onSelect={() => {
-                  navigateToPlusPage(PLUS_UTM_MEDIUMS.CHAT_MODE_SELECT);
-                  onCloseProject?.();
-                }}
-              >
-                <LibraryBig className="tw-size-4" />
-                Projects
-                <SquareArrowOutUpRight className="tw-ml-auto tw-size-3" />
-              </DropdownMenuItem>
-            )}
+            <div className="tw-max-h-64 tw-overflow-y-auto">
+              {(settings.projectList ?? []).map((project) => {
+                const isCurrentProject =
+                  selectedChain === ChainType.PROJECT_CHAIN && currentProject?.id === project.id;
+                return (
+                  <DropdownMenuItem
+                    key={project.id}
+                    onSelect={() => handleProjectSelection(project)}
+                    className="tw-flex tw-items-center"
+                    aria-current={isCurrentProject ? "true" : undefined}
+                  >
+                    <LibraryBig className="tw-size-4 tw-text-muted" />
+                    <span className="tw-min-w-0 tw-flex-1 tw-truncate">{project.name}</span>
+                    {isCurrentProject && <CheckCircle className="tw-size-3.5 tw-text-accent" />}
+                  </DropdownMenuItem>
+                );
+              })}
+            </div>
+            <DropdownMenuItem onSelect={() => handleModeChange(ChainType.PROJECT_CHAIN)}>
+              {(settings.projectList ?? []).length > 0 ? "Manage projects" : "Open projects"}
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

@@ -15,8 +15,8 @@ import {
   MessageContent,
 } from "@/imageProcessing/imageProcessor";
 import { logInfo, logWarn } from "@/logger";
-import { checkIsPlusUser } from "@/plusUtils";
 import { getSettings } from "@/settings/model";
+import { isPdfPageImage, materializePdfPageImages, PdfPageImage } from "@/utils/pdfPageContext";
 import { getStableSystemPrompt } from "@/system-prompts/systemPromptBuilder";
 import { appendVolatileMemory } from "@/memory/memoryPromptUtils";
 import { logPromptCacheDebug } from "./utils/promptCacheDebug";
@@ -75,7 +75,7 @@ type ToolCallWithExecutor = {
   args: any;
 };
 
-export class CopilotPlusChainRunner extends BaseChainRunner {
+export class AgentChainRunner extends BaseChainRunner {
   /**
    * Get available tools for Copilot Plus chain.
    * Uses a minimal set of utility tools: time tools and file tree.
@@ -117,7 +117,7 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
 
     // Check if model supports native tool calling
     if (typeof (chatModel as any).bindTools !== "function") {
-      logWarn("[CopilotPlus] Model does not support native tool calling, skipping tool planning");
+      logWarn("[Agent] Model does not support native tool calling, skipping tool planning");
       return {
         toolCalls: [],
         salientTerms: this.extractSalientTermsFromQuery(userMessage),
@@ -155,7 +155,7 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
       },
     ];
 
-    logInfo("[CopilotPlus] Requesting tool planning with native tool calling...");
+    logInfo("[Agent] Requesting tool planning with native tool calling...");
 
     // Use stream() instead of invoke() to avoid LangChain's _generate() path,
     // which calls _getEstimatedTokenCountFromPrompt -> getNumTokens -> tiktoken
@@ -171,7 +171,7 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
         aggregated = aggregated ? aggregated.concat(chunk) : chunk;
       }
       if (!aggregated) {
-        throw new Error("[CopilotPlus] Received empty response from planning model");
+        throw new Error("[Agent] Received empty response from planning model");
       }
       response = new AIMessage({
         content: aggregated.content,
@@ -185,7 +185,7 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
     const responseText =
       typeof response.content === "string" ? response.content : String(response.content);
 
-    logInfo("[CopilotPlus] Native tool calls:", nativeToolCalls.length);
+    logInfo("[Agent] Native tool calls:", nativeToolCalls.length);
 
     // Extract salient terms from response text
     const { salientTerms } = this.extractPlanningFieldsFromResponse(responseText, userMessage);
@@ -199,9 +199,9 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
           tool,
           args: tc.args as Record<string, unknown>,
         });
-        logInfo(`[CopilotPlus] Tool call: ${tc.name}`, tc.args);
+        logInfo(`[Agent] Tool call: ${tc.name}`, tc.args);
       } else {
-        logWarn(`[CopilotPlus] Tool '${tc.name}' not found in available tools`);
+        logWarn(`[Agent] Tool '${tc.name}' not found in available tools`);
       }
     }
 
@@ -376,7 +376,7 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
     const identifier = identifierMatch ? identifierMatch[1] : undefined;
 
     logInfo(
-      `[CopilotPlus] Extracting images from ${source.displayName}:`,
+      `[Agent] Extracting images from ${source.displayName}:`,
       identifier || `no ${source.identifierTag}`
     );
 
@@ -476,7 +476,7 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
 
       if (!envelope) {
         throw new Error(
-          "[CopilotPlus] Context envelope is required but not available. Cannot extract images."
+          "[Agent] Context envelope is required but not available. Cannot extract images."
         );
       }
 
@@ -524,8 +524,12 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
     // Non-image multimodal parts (e.g. PDFs attached as `file`) are not images:
     // the image processor would drop them, so carry them through unchanged.
     const fileParts: FileContent[] = [];
+    const pdfPages: PdfPageImage[] = [];
     if (existingContent && existingContent.length > 0) {
-      const result = await this.processChatInputImages(existingContent);
+      pdfPages.push(...existingContent.filter(isPdfPageImage));
+      const result = await this.processChatInputImages(
+        existingContent.filter((item) => !isPdfPageImage(item))
+      );
       successfulImages.push(...result.successfulImages);
       failureMessages.push(...result.failureDescriptions);
       for (const item of existingContent) {
@@ -555,6 +559,7 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
     if (successfulImages.length > 0) {
       messageContent.push(...successfulImages);
     }
+    messageContent.push(...materializePdfPageImages(pdfPages));
 
     return messageContent;
   }
@@ -595,7 +600,8 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
 
     // Get chat model
     const chatModel = this.chainManager.chatModelManager.getChatModel();
-    const isMultimodalCurrent = this.isMultimodalModel(chatModel);
+    const isMultimodalCurrent =
+      this.isMultimodalModel(chatModel) || userMessage.content?.some(isPdfPageImage);
 
     // Create messages array
     const messages: any[] = [];
@@ -604,11 +610,11 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
     const envelope = userMessage.contextEnvelope;
     if (!envelope) {
       throw new Error(
-        "[CopilotPlus] Context envelope is required but not available. Cannot proceed with CopilotPlus chain."
+        "[Agent] Context envelope is required but not available. Cannot proceed with agent chain."
       );
     }
 
-    logInfo("[CopilotPlus] Using envelope-based context construction");
+    logInfo("[Agent] Using envelope-based context construction");
 
     // Use LayerToMessagesConverter to get base messages with L1+L2 system, L3+L5 user
     const baseMessages = LayerToMessagesConverter.convert(envelope, {
@@ -630,7 +636,9 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
     await loadAndAddChatHistory(memory, messages);
 
     // Process user message (L3 smart references + L5)
-    const userMessageContent = baseMessages.find((m) => m.role === "user");
+    const userMessageContent =
+      baseMessages.find((m) => m.role === "user") ??
+      (userMessage.content?.some(isPdfPageImage) ? { role: "user", content: "" } : undefined);
     if (userMessageContent) {
       let finalUserContent;
 
@@ -730,7 +738,7 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
 
     for await (const chunk of chatStream) {
       if (abortController.signal.aborted) {
-        logInfo("CopilotPlus multimodal stream iteration aborted", {
+        logInfo("Agent multimodal stream iteration aborted", {
           reason: abortController.signal.reason,
         });
         break;
@@ -763,26 +771,6 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
     const thinkStreamer = new ThinkBlockStreamer(updateCurrentAiMessage, excludeThinking);
     let sources: { title: string; path: string; score: number; explanation?: any }[] = [];
 
-    const isPlusUser = await checkIsPlusUser({
-      isCopilotPlus: true,
-    });
-    if (!isPlusUser) {
-      await this.handleError(
-        new Error("Invalid license key"),
-        thinkStreamer.processErrorChunk.bind(thinkStreamer)
-      );
-      const errorResponse = thinkStreamer.close().content;
-
-      return this.handleResponse(
-        errorResponse,
-        userMessage,
-        abortController,
-        addMessage,
-        updateCurrentAiMessage,
-        undefined // no sources
-      );
-    }
-
     try {
       logInfo("==== Step 1: Planning tools ====");
       let toolCalls: ToolCallWithExecutor[];
@@ -791,7 +779,7 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
       const envelope = userMessage.contextEnvelope;
       if (!envelope) {
         throw new Error(
-          "[CopilotPlus] Context envelope is required but not available. Cannot proceed with CopilotPlus chain."
+          "[Agent] Context envelope is required but not available. Cannot proceed with agent chain."
         );
       }
       const l5User = envelope.layers.find((l) => l.id === "L5_USER");
@@ -833,12 +821,12 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
                 timeRange = extractEpochValues(parsed);
               }
             } catch {
-              logWarn("[CopilotPlus] Failed to parse getTimeRangeMs result:", timeRangeResult);
+              logWarn("[Agent] Failed to parse getTimeRangeMs result:", timeRangeResult);
             }
           } else if (timeRangeResult && !timeRangeResult.error) {
             timeRange = extractEpochValues(timeRangeResult);
           }
-          logInfo("[CopilotPlus] Executed getTimeRangeMs, result:", timeRange);
+          logInfo("[Agent] Executed getTimeRangeMs, result:", timeRange);
         }
 
         // Filter tool calls: skip getFileTree in project mode, skip getTimeRangeMs if already executed
@@ -914,7 +902,7 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
 
       // Check if the error is due to abort signal
       if (error.name === "AbortError" || abortController.signal.aborted) {
-        logInfo("CopilotPlus stream aborted by user", { reason: abortController.signal.reason });
+        logInfo("Agent stream aborted by user", { reason: abortController.signal.reason });
         // Don't show error message for user-initiated aborts
       } else {
         await this.handleError(error, thinkStreamer.processErrorChunk.bind(thinkStreamer));

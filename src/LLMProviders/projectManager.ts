@@ -22,7 +22,7 @@ import { err2String } from "@/utils";
 import { isRateLimitError } from "@/utils/rateLimitUtils";
 import { RecentUsageManager } from "@/utils/recentUsageManager";
 import { App, Notice, TFile } from "obsidian";
-import { BrevilabsClient } from "./brevilabsClient";
+import { isSelfHostEnabled, selfHostYoutube4llm } from "./selfHostServices";
 import ChainManager from "./chainManager";
 import { ProjectLoadTracker } from "./projectLoadTracker";
 
@@ -43,12 +43,7 @@ export default class ProjectManager {
     this.currentProjectId = null;
     this.chainMangerInstance = new ChainManager(app);
     this.projectContextCache = ProjectContextCache.getInstance();
-    this.fileParserManager = new FileParserManager(
-      BrevilabsClient.getInstance(),
-      this.app.vault,
-      true,
-      null
-    );
+    this.fileParserManager = new FileParserManager(this.app.vault, true, null);
     this.loadTracker = ProjectLoadTracker.getInstance(this.app);
 
     // Set up subscriptions
@@ -65,8 +60,7 @@ export default class ProjectManager {
       const shouldAutoIndex =
         settings.enableSemanticSearchV3 &&
         settings.indexVaultToVectorStore === VAULT_VECTOR_STORE_STRATEGY.ON_MODE_SWITCH &&
-        (getChainType() === ChainType.VAULT_QA_CHAIN ||
-          getChainType() === ChainType.COPILOT_PLUS_CHAIN);
+        getChainType() === ChainType.VAULT_QA_CHAIN;
       await this.getCurrentChainManager().createChainWithNewModel({
         refreshIndex: shouldAutoIndex,
       });
@@ -231,12 +225,7 @@ export default class ProjectManager {
       await this.loadNextProjectMessage();
       await this.getCurrentChainManager().createChainWithNewModel();
       // Update FileParserManager with the current project
-      this.fileParserManager = new FileParserManager(
-        BrevilabsClient.getInstance(),
-        this.app.vault,
-        true,
-        project
-      );
+      this.fileParserManager = new FileParserManager(this.app.vault, true, project);
       await this.loadProjectContext(project);
 
       // fresh chat view
@@ -784,12 +773,19 @@ modified: ${stat ? new Date(stat.mtime).toISOString() : "unknown"}`;
       return "";
     }
 
+    if (!(isSelfHostEnabled() && getSettings().supadataApiKey)) {
+      logWarn(
+        `Skipping YouTube transcript for ${youtubeUrl}: a Supadata API key is required in settings`
+      );
+      return "";
+    }
+
     try {
       const response = await this.loadTracker.executeWithProcessTracking(
         youtubeUrl,
         "youtube",
         async () => {
-          return BrevilabsClient.getInstance().youtube4llm(youtubeUrl);
+          return selfHostYoutube4llm(youtubeUrl);
         }
       );
       if (response.response.transcript) {
@@ -817,12 +813,7 @@ modified: ${stat ? new Date(stat.mtime).toISOString() : "unknown"}`;
       return;
     }
 
-    this.fileParserManager = new FileParserManager(
-      BrevilabsClient.getInstance(),
-      this.app.vault,
-      true,
-      project
-    );
+    this.fileParserManager = new FileParserManager(this.app.vault, true, project);
 
     let processedNonMdCount = 0;
 

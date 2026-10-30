@@ -1,5 +1,5 @@
 import { logInfo, logWarn } from "@/logger";
-import { isSelfHostModeValid } from "@/plusUtils";
+import { isSelfHostEnabled } from "@/LLMProviders/selfHostServices";
 import { shouldUseMiyo } from "@/miyo/miyoUtils";
 import { getSettings, CopilotSettings } from "@/settings/model";
 import { App } from "obsidian";
@@ -85,7 +85,7 @@ export interface DocumentRetriever {
  * Factory for creating retrievers based on current settings.
  * Centralizes the retriever selection logic to avoid duplication across:
  * - VaultQAChainRunner
- * - CopilotPlusChainRunner (via SearchTools)
+ * - AgentChainRunner (via SearchTools)
  * - Any other components that need search
  *
  * Priority order:
@@ -154,7 +154,7 @@ export class RetrieverFactory {
     }
 
     // Self-host mode handling - requires valid validation (within grace period)
-    if (isSelfHostModeValid()) {
+    if (isSelfHostEnabled()) {
       // If URL is configured, try to use self-host backend (API key is optional)
       if (currentSettings.selfHostUrl) {
         const backend = await RetrieverFactory.getSelfHostedBackend(currentSettings);
@@ -297,7 +297,7 @@ export class RetrieverFactory {
     }
 
     // Self-host mode handling - requires valid validation (within grace period)
-    if (isSelfHostModeValid()) {
+    if (isSelfHostEnabled()) {
       // URL configured with backend available → self_hosted (API key is optional)
       if (currentSettings.selfHostUrl && RetrieverFactory.selfHostedBackend) {
         return "self_hosted";

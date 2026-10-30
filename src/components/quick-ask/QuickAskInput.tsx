@@ -167,7 +167,10 @@ export const QuickAskInput = React.memo(function QuickAskInput({
             onActiveNoteRemoved={onActiveNoteRemoved}
           />
           <PillDeletionPlugin />
-          <AtMentionCommandPlugin isCopilotPlus={false} currentActiveFile={currentActiveFile} />
+          <AtMentionCommandPlugin
+            includeExtendedFiles={false}
+            currentActiveFile={currentActiveFile}
+          />
         </div>
       </ActiveFileProvider>
     </LexicalComposer>

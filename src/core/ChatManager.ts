@@ -19,7 +19,12 @@ import { MessageRepository } from "./MessageRepository";
 import { ChatPersistenceManager } from "./ChatPersistenceManager";
 import { ACTIVE_WEB_TAB_MARKER, USER_SENDER } from "@/constants";
 import { TFile, Vault } from "obsidian";
-import { arrayBufferToBase64 } from "@/utils/base64";
+import { defaultPdfPageRange, isPdfPageImage } from "@/utils/pdfPageContext";
+import {
+  getOpenPdfPage,
+  getPdfPageCount,
+  renderPdfPageRange,
+} from "@/services/pdfPageContextService";
 import { getWebViewerService } from "@/services/webViewerService/webViewerServiceSingleton";
 import {
   normalizeUrlForMatching,
@@ -451,7 +456,7 @@ export class ChatManager {
         shouldIncludeActiveWebTab
       );
 
-      // Process PDF files in context as multimodal attachments
+      // Snapshot selected PDF pages as ordinary images for vision APIs.
       const pdfNotes = (updatedContext.notes || []).filter(
         (note): note is TFile => note instanceof TFile && note.extension?.toLowerCase() === "pdf"
       );
@@ -459,22 +464,23 @@ export class ChatManager {
       if (pdfNotes.length > 0) {
         const messageContent: any[] = content ? [...content] : [];
 
-        for (const pdfFile of pdfNotes) {
-          const alreadyExists = messageContent.some(
-            (item: any) => item.type === "file" && item.file?.filename === pdfFile.name
+        updatedContext.pdfPageRanges = { ...context.pdfPageRanges };
+        for (const pdfFile of new Map(pdfNotes.map((file) => [file.path, file])).values()) {
+          const range =
+            context.pdfPageRanges?.[pdfFile.path] ??
+            defaultPdfPageRange(
+              getOpenPdfPage(this.plugin.app, pdfFile),
+              await getPdfPageCount(this.plugin.app.vault, pdfFile)
+            );
+          updatedContext.pdfPageRanges[pdfFile.path] = { ...range };
+          messageContent.push(
+            ...(await renderPdfPageRange(
+              this.plugin.app.vault,
+              pdfFile,
+              range,
+              updateLoadingMessage
+            ))
           );
-          if (!alreadyExists) {
-            updateLoadingMessage?.("Reading PDF document...");
-            const binaryBuffer = await this.plugin.app.vault.readBinary(pdfFile);
-            const base64 = arrayBufferToBase64(binaryBuffer);
-            messageContent.unshift({
-              type: "file",
-              file: {
-                file_data: `data:application/pdf;base64,${base64}`,
-                filename: pdfFile.name,
-              },
-            });
-          }
         }
 
         if (displayText && !messageContent.some((item: any) => item.type === "text")) {
@@ -668,6 +674,19 @@ export class ChatManager {
         );
         // Re-fetch the LLM message with the newly created envelope
         llmMessage = currentRepo.getLLMMessage(userMessage.id)!;
+      }
+
+      // Saved chats retain page references rather than base64 images. Restore
+      // the original range locally when regenerating a restored conversation.
+      for (const [path, range] of Object.entries(llmMessage.context?.pdfPageRanges || {})) {
+        if (llmMessage.content?.some((item) => isPdfPageImage(item) && item.pdfPage.path === path))
+          continue;
+        const file = this.plugin.app.vault.getAbstractFileByPath(path);
+        if (!(file instanceof TFile)) throw new Error(`PDF not found: ${path}`);
+        llmMessage.content = [
+          ...(llmMessage.content || []),
+          ...(await renderPdfPageRange(this.plugin.app.vault, file, range)),
+        ];
       }
 
       // Run the chain to regenerate the response

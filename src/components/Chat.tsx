@@ -41,12 +41,11 @@ import ChainManager from "@/LLMProviders/chainManager";
 import { clearRecordedPromptPayload } from "@/LLMProviders/chainRunner/utils/promptPayloadRecorder";
 import { logFileManager } from "@/logFileManager";
 import CopilotPlugin from "@/main";
-import { useIsPlusUser } from "@/plusUtils";
 import { updateSetting, useSettingsValue } from "@/settings/model";
 import { ChatUIState } from "@/state/ChatUIState";
 import { FileParserManager } from "@/tools/FileParserManager";
-import { ChatMessage, TokenUsage } from "@/types/message";
-import { err2String, isPlusChain } from "@/utils";
+import { ChatMessage, MessageContext, TokenUsage } from "@/types/message";
+import { err2String, isToolEnhancedChain } from "@/utils";
 import { arrayBufferToBase64 } from "@/utils/base64";
 import { Notice, TFile } from "obsidian";
 import { ContextManageModal } from "@/components/modals/project/context-manage-modal";
@@ -291,7 +290,6 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
 
   const [previousMode, setPreviousMode] = useState<ChainType | null>(null);
   const [selectedChain, setSelectedChain] = useChainType();
-  const isPlusUser = useIsPlusUser();
 
   const appContext = useContext(AppContext);
   const app = plugin.app || appContext;
@@ -313,6 +311,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
     contextTags,
     contextFolders,
     webTabs,
+    pdfPageRanges,
   }: {
     toolCalls?: string[];
     urls?: string[];
@@ -320,6 +319,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
     contextTags?: string[];
     contextFolders?: string[];
     webTabs?: WebTabContext[];
+    pdfPageRanges?: MessageContext["pdfPageRanges"];
   } = {}) => {
     const hasPdfInContext =
       (effectiveIncludeActiveNote &&
@@ -332,7 +332,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
     // Check for URL restrictions in non-Plus chains and show notice, but continue processing
     const hasUrlsInContext = urls && urls.length > 0;
 
-    if (hasUrlsInContext && !isPlusChain(currentChain)) {
+    if (hasUrlsInContext && !isToolEnhancedChain(currentChain)) {
       // Show notice but continue processing the message without URL context
       new Notice(RESTRICTION_MESSAGES.URL_PROCESSING_RESTRICTED);
     }
@@ -378,16 +378,14 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
       // Create message context - filter out URLs for non-Plus chains
       const context = {
         notes,
-        urls: isPlusChain(currentChain) ? urls || [] : [],
+        urls: isToolEnhancedChain(currentChain) ? urls || [] : [],
         tags: contextTags || [],
         folders: contextFolders || [],
         selectedTextContexts,
         webTabs: webTabs || [],
+        pdfPageRanges,
       };
 
-      // Clear input and images
-      setInputMessage("");
-      setSelectedImages([]);
       streamingMessageIdRef.current = `msg-${uuidv4()}`;
       safeSet.setLoading(true);
       safeSet.setLoadingMessage(LOADING_MESSAGES.DEFAULT);
@@ -402,6 +400,10 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
         content.length > 0 ? content : undefined,
         safeSet.setLoadingMessage
       );
+
+      // Retain the draft until attachments have rendered and the message exists.
+      setInputMessage("");
+      setSelectedImages([]);
 
       // Add to user message history
       if (inputMessage) {
@@ -432,7 +434,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
       }
     } catch (error) {
       logError("Error sending message:", error);
-      new Notice("Failed to send message. Please try again.");
+      new Notice(`Failed to send message: ${err2String(error)}`);
     } finally {
       // Apply the last coalesced tokens before clearing the loading state, so
       // the completed message is never missing its final frame of content.
@@ -1045,10 +1047,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
                     setSelectedChain(previousMode);
                     setPreviousMode(null);
                   } else {
-                    // default back to chat or plus mode
-                    setSelectedChain(
-                      isPlusUser ? ChainType.COPILOT_PLUS_CHAIN : ChainType.LLM_CHAIN
-                    );
+                    setSelectedChain(ChainType.LLM_CHAIN);
                   }
                 }}
                 isChatVisible={showChatUI}

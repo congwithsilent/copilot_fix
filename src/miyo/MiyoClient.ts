@@ -1,4 +1,3 @@
-import { getDecryptedKey } from "@/encryptionService";
 import { logError, logInfo, logWarn } from "@/logger";
 import { MiyoServiceDiscovery } from "@/miyo/MiyoServiceDiscovery";
 import { getSettings } from "@/settings/model";
@@ -354,23 +353,12 @@ export class MiyoClient {
   }
 
   /**
-   * Build request headers, including auth when configured.
-   * `Authorization` uses the Copilot Plus license key.
+   * Build request headers.
    *
    * @returns Headers object for requestUrl.
    */
   private async buildHeaders(): Promise<Record<string, string>> {
-    const settings = getSettings();
-    const headers: Record<string, string> = {};
-
-    const licenseKey = settings.plusLicenseKey
-      ? await getDecryptedKey(settings.plusLicenseKey)
-      : "";
-    if (licenseKey) {
-      headers.Authorization = `Bearer ${licenseKey}`;
-    }
-
-    return headers;
+    return {};
   }
 
   /**

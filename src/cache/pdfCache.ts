@@ -1,7 +1,12 @@
-import { Pdf4llmResponse } from "@/LLMProviders/brevilabsClient";
 import { logError, logInfo } from "@/logger";
 import { MD5 } from "crypto-js";
 import { TFile } from "obsidian";
+
+/** Shape of a cached PDF parse result. */
+export interface PdfParseResult {
+  response: string;
+  elapsed_time_ms: number;
+}
 
 export class PDFCache {
   private static instance: PDFCache;
@@ -35,7 +40,7 @@ export class PDFCache {
     return `${this.cacheDir}/${cacheKey}.json`;
   }
 
-  async get(file: TFile): Promise<Pdf4llmResponse | null> {
+  async get(file: TFile): Promise<PdfParseResult | null> {
     try {
       const cacheKey = this.getCacheKey(file);
       const cachePath = this.getCachePath(cacheKey);
@@ -53,7 +58,7 @@ export class PDFCache {
     }
   }
 
-  async set(file: TFile, response: Pdf4llmResponse): Promise<void> {
+  async set(file: TFile, response: PdfParseResult): Promise<void> {
     try {
       await this.ensureCacheDir();
       const cacheKey = this.getCacheKey(file);

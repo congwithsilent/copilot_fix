@@ -16,14 +16,14 @@ General-purpose conversation. Good for writing, brainstorming, summarizing, or a
 
 Ask questions about your vault content. Copilot uses lexical search (keyword matching) to find relevant notes and passes them as context to the AI. No indexing required. Good for quick questions about your notes.
 
-### Copilot Plus
-
-The most powerful mode. Requires a [Copilot Plus](copilot-plus-and-self-host.md) license. Combines Chat and Vault QA with an autonomous agent that can:
+**Chat mode also includes an optional autonomous agent** that can:
 
 - Search your vault and the web
 - Read and edit notes
 - Remember things across conversations
 - Use a growing set of tools automatically
+
+Enable it with the **Agent** toggle next to the chat input, or in **Settings → Copilot → Agent**. See [Agent Mode and Tools](agent-mode-and-tools.md) for details.
 
 ### Projects (alpha)
 

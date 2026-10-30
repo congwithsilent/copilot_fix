@@ -1,7 +1,3 @@
-jest.mock("@/plusUtils", () => ({
-  isSelfHostAccessValid: jest.fn(),
-}));
-
 import { getMiyoFolderName } from "@/miyo/miyoUtils";
 
 describe("getMiyoFolderName", () => {

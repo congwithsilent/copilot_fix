@@ -1,4 +1,4 @@
-import { isSelfHostAccessValid } from "@/plusUtils";
+import { isSelfHostEnabled } from "@/LLMProviders/selfHostServices";
 import { CopilotSettings } from "@/settings/model";
 import { App, FileSystemAdapter, Platform } from "obsidian";
 
@@ -18,7 +18,7 @@ export function getMiyoCustomUrl(settings: CopilotSettings): string {
  *
  * Returns false when:
  * - `enableMiyo` is off, or
- * - self-host access is invalid, or
+ * - self-host mode is disabled, or
  * - running on mobile without a remote server URL (local service discovery
  *   is unavailable on mobile, so Miyo can only work via an explicit URL).
  *
@@ -29,7 +29,7 @@ export function getMiyoCustomUrl(settings: CopilotSettings): string {
  * @param settings - Current Copilot settings.
  */
 export function shouldUseMiyo(settings: CopilotSettings): boolean {
-  if (!settings.enableMiyo || !isSelfHostAccessValid()) {
+  if (!settings.enableMiyo || !isSelfHostEnabled()) {
     return false;
   }
   return !Platform.isMobile || !!getMiyoCustomUrl(settings);

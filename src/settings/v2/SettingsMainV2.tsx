@@ -6,15 +6,15 @@ import { useLatestVersion } from "@/hooks/useLatestVersion";
 import CopilotPlugin from "@/main";
 import { resetSettings } from "@/settings/model";
 import { CommandSettings } from "@/settings/v2/components/CommandSettings";
-import { Cog, Command, Cpu, Database, Sparkles, Wrench } from "lucide-react";
+import { Bot, Cog, Command, Cpu, Database, Wrench } from "lucide-react";
 import React from "react";
 import { AdvancedSettings } from "./components/AdvancedSettings";
 import { BasicSettings } from "./components/BasicSettings";
-import { CopilotPlusSettings } from "./components/CopilotPlusSettings";
+import { AgentSettings } from "./components/AgentSettings";
 import { ModelSettings } from "./components/ModelSettings";
 import { QASettings } from "./components/QASettings";
 
-const TAB_IDS = ["basic", "model", "QA", "command", "plus", "advanced"] as const;
+const TAB_IDS = ["basic", "model", "QA", "command", "agent", "advanced"] as const;
 type TabId = (typeof TAB_IDS)[number];
 
 // tab icons
@@ -23,7 +23,7 @@ const icons: Record<TabId, JSX.Element> = {
   model: <Cpu className="tw-size-4" />,
   QA: <Database className="tw-size-4" />,
   command: <Command className="tw-size-4" />,
-  plus: <Sparkles className="tw-size-4" />,
+  agent: <Bot className="tw-size-4" />,
   advanced: <Wrench className="tw-size-4" />,
 };
 
@@ -33,7 +33,7 @@ const components: Record<TabId, React.FC> = {
   model: () => <ModelSettings />,
   QA: () => <QASettings />,
   command: () => <CommandSettings />,
-  plus: () => <CopilotPlusSettings />,
+  agent: () => <AgentSettings />,
   advanced: () => <AdvancedSettings />,
 };
 
@@ -43,7 +43,7 @@ const labels: Record<TabId, string> = {
   model: "Model",
   QA: "QA",
   command: "Command",
-  plus: "Plus",
+  agent: "Agent",
   advanced: "Advanced",
 };
 

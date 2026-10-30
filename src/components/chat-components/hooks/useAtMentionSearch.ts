@@ -21,12 +21,12 @@ export function useAtMentionSearch(
   query: string,
   mode: "category" | "search",
   selectedCategory: AtMentionCategory | undefined,
-  isCopilotPlus: boolean,
+  includeExtendedFiles: boolean,
   availableCategoryOptions: CategoryOption[],
   currentActiveFile: TFile | null = null
 ): (CategoryOption | AtMentionOption)[] {
   // Get raw data without pre-filtering
-  const allNotes = useAllNotes(isCopilotPlus);
+  const allNotes = useAllNotes(includeExtendedFiles);
   const allFolders = useAllFolders();
 
   // Only enable web tab polling when actually needed:
@@ -59,7 +59,7 @@ export function useAtMentionSearch(
 
   const toolItems: AtMentionOption[] = useMemo(
     () =>
-      isCopilotPlus
+      includeExtendedFiles
         ? AVAILABLE_TOOLS.map((tool) => ({
             key: `tool-${tool}`,
             title: tool,
@@ -70,7 +70,7 @@ export function useAtMentionSearch(
             icon: React.createElement(Wrench, { className: "tw-size-4" }),
           }))
         : [],
-    [isCopilotPlus]
+    [includeExtendedFiles]
   );
 
   const folderItems: AtMentionOption[] = useMemo(

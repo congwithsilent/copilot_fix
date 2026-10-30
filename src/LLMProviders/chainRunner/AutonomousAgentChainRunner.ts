@@ -2,8 +2,8 @@ import { AGENT_LOOP_TIMEOUT_MS } from "@/constants";
 import { MessageContent } from "@/imageProcessing/imageProcessor";
 import { logError, logInfo, logWarn } from "@/logger";
 import { UserMemoryManager } from "@/memory/UserMemoryManager";
-import { checkIsPlusUser } from "@/plusUtils";
 import { getSettings } from "@/settings/model";
+import { isPdfPageImage } from "@/utils/pdfPageContext";
 import { getStableSystemPrompt } from "@/system-prompts/systemPromptBuilder";
 import { appendVolatileMemory } from "@/memory/memoryPromptUtils";
 import { logPromptCacheDebug } from "./utils/promptCacheDebug";
@@ -14,7 +14,7 @@ import { Runnable } from "@langchain/core/runnables";
 import { ChatMessage, ResponseMetadata, StreamingResult } from "@/types/message";
 import { err2String, withSuppressedTokenWarnings } from "@/utils";
 import { AIMessage, BaseMessage, HumanMessage, SystemMessage } from "@langchain/core/messages";
-import { CopilotPlusChainRunner } from "./CopilotPlusChainRunner";
+import { AgentChainRunner } from "./AgentChainRunner";
 import { loadAndAddChatHistory } from "./utils/chatHistoryUtils";
 import { ModelAdapter, ModelAdapterFactory } from "./utils/modelAdapter";
 import { ThinkBlockStreamer } from "./utils/ThinkBlockStreamer";
@@ -118,7 +118,7 @@ interface ReActLoopResult {
   responseMetadata?: ResponseMetadata;
 }
 
-export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
+export class AutonomousAgentChainRunner extends AgentChainRunner {
   private llmFormattedMessages: string[] = []; // Track LLM-formatted messages for memory
   private lastDisplayedContent = ""; // Track the last content displayed to user for error recovery
 
@@ -392,30 +392,10 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
     this.llmFormattedMessages = [];
     this.lastDisplayedContent = "";
 
-    const isPlusUser = await checkIsPlusUser({
-      isAutonomousAgent: true,
-    });
-
     const chatModel = this.chainManager.chatModelManager.getChatModel();
     const adapter = ModelAdapterFactory.createAdapter(chatModel);
     // Agent mode should never show thinking tokens in the response
     const thinkStreamer = new ThinkBlockStreamer(updateCurrentAiMessage, true);
-
-    if (!isPlusUser) {
-      await this.handleError(
-        new Error("Invalid license key"),
-        thinkStreamer.processErrorChunk.bind(thinkStreamer)
-      );
-      const errorResponse = thinkStreamer.close().content;
-      return this.handleResponse(
-        errorResponse,
-        userMessage,
-        abortController,
-        addMessage,
-        updateCurrentAiMessage,
-        undefined
-      );
-    }
 
     const modelNameForLog = (chatModel as { modelName?: string } | undefined)?.modelName;
 
@@ -496,7 +476,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
 
       logError("Autonomous agent failed, falling back to regular Plus mode:", error);
       try {
-        const fallbackRunner = new CopilotPlusChainRunner(this.chainManager);
+        const fallbackRunner = new AgentChainRunner(this.chainManager);
         return await fallbackRunner.run(
           userMessage,
           abortController,
@@ -627,13 +607,16 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
     }
 
     // Extract user content (L3 smart references + L5) from base messages
-    const userMessageContent = baseMessages.find((m) => m.role === "user");
+    const userMessageContent =
+      baseMessages.find((m) => m.role === "user") ??
+      (userMessage.content?.some(isPdfPageImage) ? { role: "user", content: "" } : undefined);
     if (userMessageContent) {
       // Volatile memory is appended only to the initial user message of the
       // turn, never to the tool-result iterations that follow.
       const volatileMemory = await this.chainManager.userMemoryManager.getVolatileMemoryPrompt();
       const baseContent = appendVolatileMemory(userMessageContent.content, volatileMemory);
-      const isMultimodal = this.isMultimodalModel(chatModel);
+      const isMultimodal =
+        this.isMultimodalModel(chatModel) || userMessage.content?.some(isPdfPageImage);
       const content: string | MessageContent[] = isMultimodal
         ? await this.buildMessageContent(baseContent, userMessage)
         : baseContent;

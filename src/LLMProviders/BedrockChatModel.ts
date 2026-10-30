@@ -98,7 +98,7 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
     }
 
     // Store modelId as modelName for capability detection
-    // This allows CopilotPlusChainRunner.hasCapability() to find the model configuration
+    // This allows AgentChainRunner.hasCapability() to find the model configuration
     this.modelName = modelId;
     this.apiKey = apiKey;
     this.endpoint = endpoint;

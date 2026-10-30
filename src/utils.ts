@@ -2,7 +2,6 @@ import { ChainType, Document } from "@/chainFactory";
 import {
   ALLOWED_NOTE_CONTEXT_EXTENSIONS,
   ChatModelProviders,
-  EmbeddingModelProviders,
   NOMIC_EMBED_TEXT,
   Provider,
   ProviderInfo,
@@ -260,7 +259,8 @@ export const stringToChainType = (chain: string): ChainType => {
     case "vault_qa":
       return ChainType.VAULT_QA_CHAIN;
     case "copilot_plus":
-      return ChainType.COPILOT_PLUS_CHAIN;
+      // Migration: the Copilot Plus chat mode was removed; fall back to regular chat.
+      return ChainType.LLM_CHAIN;
     default:
       throw new Error(`Unknown chain type: ${chain}`);
   }
@@ -404,19 +404,28 @@ export function isAllowedFileForNoteContext(file: TFile | null): boolean {
 }
 
 /**
- * Checks if a chain type is a Plus mode chain (Copilot Plus or Project Chain).
- * Plus mode chains have access to premium features like PDF processing and URL processing.
+ * Checks if a chain type is a Project chain.
+ * Project chains have access to extended file-type context (EPUB, PPT, DOCX, etc.).
  * @param chainType The chain type to check
- * @returns true if this is a Plus mode chain, false otherwise
+ * @returns true if this is a Project chain, false otherwise
  */
-export function isPlusChain(chainType: ChainType): boolean {
-  return chainType === ChainType.COPILOT_PLUS_CHAIN || chainType === ChainType.PROJECT_CHAIN;
+export function isProjectChain(chainType: ChainType): boolean {
+  return chainType === ChainType.PROJECT_CHAIN;
+}
+
+/**
+ * Checks if a chain type supports tool pills and URL context (regular chat and project chains).
+ * @param chainType The chain type to check
+ * @returns true if the chain supports tools and URL context, false otherwise
+ */
+export function isToolEnhancedChain(chainType: ChainType): boolean {
+  return chainType === ChainType.LLM_CHAIN || chainType === ChainType.PROJECT_CHAIN;
 }
 
 /**
  * Checks if a file extension is allowed for context based on the chain type.
  * All chains support text-readable files (md, canvas, base).
- * Plus chains additionally support PDF, EPUB, PPT, DOCX, etc.
+ * Project chains additionally support PDF, EPUB, PPT, DOCX, etc.
  * @param file The file to check
  * @param chainType The current chain type
  * @returns true if the file is allowed for this chain type, false otherwise
@@ -433,8 +442,8 @@ export function isAllowedFileForChainContext(file: TFile | null, chainType: Chai
     return true;
   }
 
-  // Plus chains support all other file types (EPUB, PPT, DOCX, etc.)
-  return isPlusChain(chainType);
+  // Project chains support all other file types (EPUB, PPT, DOCX, etc.)
+  return isProjectChain(chainType);
 }
 
 export async function getAllNotesContent(vault: Vault): Promise<string> {
@@ -527,7 +536,7 @@ export interface ChatHistoryEntry {
  * Extract text-only chat history from memory variables.
  * This function pairs messages by index (i, i+1) and returns only string content.
  *
- * Note: For multimodal chains (CopilotPlus, AutonomousAgent), use
+ * Note: For multimodal chains (agent and autonomous agent), use
  * chatHistoryUtils.processRawChatHistory instead to preserve image content.
  *
  * @param memoryVariables Memory variables from LangChain memory
@@ -1200,8 +1209,7 @@ export function getProviderInfo(provider: string): ProviderMetadata {
 }
 
 export function getProviderLabel(provider: string, model?: CustomModel): string {
-  const baseLabel = ProviderInfo[provider as Provider]?.label || provider;
-  return baseLabel + (model?.believerExclusive && baseLabel === "Copilot Plus" ? "(Believer)" : "");
+  return ProviderInfo[provider as Provider]?.label || provider;
 }
 
 export function getProviderHost(provider: string): string {
@@ -1457,8 +1465,6 @@ export function getNeedSetKeyProvider(): Provider[] {
     ChatModelProviders.LM_STUDIO,
     ChatModelProviders.AZURE_OPENAI,
     ChatModelProviders.GITHUB_COPILOT,
-    EmbeddingModelProviders.COPILOT_PLUS,
-    EmbeddingModelProviders.COPILOT_PLUS_JINA,
   ];
 
   return (Object.keys(ProviderInfo) as Provider[]).filter((key) => !excludeProviders.includes(key));

@@ -20,12 +20,12 @@ import { CustomCommandChatModal } from "@/commands/CustomCommandChatModal";
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { ApplyCustomCommandModal } from "@/components/modals/ApplyCustomCommandModal";
 import { YoutubeTranscriptModal } from "@/components/modals/YoutubeTranscriptModal";
-import { checkIsPlusUser } from "@/plusUtils";
 // Debug modals removed with search v3
 import CopilotPlugin from "@/main";
+import { isSelfHostEnabled } from "@/LLMProviders/selfHostServices";
 import { shouldUseMiyo } from "@/miyo/miyoUtils";
 import { getAllQAMarkdownContent } from "@/search/searchUtils";
-import { CopilotSettings } from "@/settings/model";
+import { CopilotSettings, getSettings } from "@/settings/model";
 import { NoteSelectedTextContext, WebSelectedTextContext } from "@/types/message";
 import { ensureFolderExists, isSourceModeOn } from "@/utils";
 import { Editor, MarkdownView, Notice, TFile } from "obsidian";
@@ -620,11 +620,13 @@ export function registerCommands(
     modal.open();
   });
 
-  // Add command to download YouTube script (Copilot Plus only)
+  // Add command to download YouTube script (requires a Supadata API key)
   addCommand(plugin, COMMAND_IDS.DOWNLOAD_YOUTUBE_SCRIPT, async () => {
-    const isPlusUser = await checkIsPlusUser();
-    if (!isPlusUser) {
-      new Notice("Download YouTube Script (plus) is a Copilot Plus feature");
+    const settings = getSettings();
+    if (!(isSelfHostEnabled() && settings.supadataApiKey)) {
+      new Notice(
+        "Download YouTube Script requires a Supadata API key (Settings → Agent & Self-Host)"
+      );
       return;
     }
 

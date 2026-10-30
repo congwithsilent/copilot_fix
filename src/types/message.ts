@@ -79,10 +79,18 @@ export interface WebTabContext {
 export interface MessageContext {
   notes: TFile[];
   urls: string[];
+  /** Inclusive, 1-based PDF page ranges, keyed by vault-relative file path. */
+  pdfPageRanges?: Record<string, PdfPageRange>;
   tags?: string[];
   folders?: string[];
   selectedTextContexts?: SelectedTextContext[];
   webTabs?: WebTabContext[];
+}
+
+/** Physical PDF page numbers, independent of printed page labels. */
+export interface PdfPageRange {
+  startPage: number;
+  endPage: number;
 }
 
 /**

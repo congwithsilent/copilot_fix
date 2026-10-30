@@ -11,7 +11,7 @@ import {
 import { ChainType } from "@/chainFactory";
 import { cn } from "@/lib/utils";
 import { updateSetting } from "@/settings/model";
-import { isPlusChain } from "@/utils";
+import { isToolEnhancedChain } from "@/utils";
 
 interface ChatToolControlsProps {
   // Tool toggle states
@@ -47,8 +47,8 @@ const ChatToolControls: React.FC<ChatToolControlsProps> = ({
   onComposerToggleOff,
   currentChain,
 }) => {
-  const isCopilotPlus = isPlusChain(currentChain);
-  const showAutonomousAgent = isCopilotPlus && currentChain !== ChainType.PROJECT_CHAIN;
+  const showToolControls = isToolEnhancedChain(currentChain);
+  const showAutonomousAgent = currentChain === ChainType.LLM_CHAIN;
 
   const handleAutonomousAgentToggle = () => {
     const newValue = !autonomousAgentToggle;
@@ -83,8 +83,8 @@ const ChatToolControls: React.FC<ChatToolControlsProps> = ({
     }
   };
 
-  // If not Copilot Plus, don't show any tools
-  if (!isCopilotPlus) {
+  // Chains without tool support show no tool controls
+  if (!showToolControls) {
     return null;
   }
 

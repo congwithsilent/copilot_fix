@@ -15,10 +15,10 @@ import { settingsStore } from "@/settings/model";
  * - Debounced updates (250ms) to batch rapid file operations
  * - Stable array references to prevent unnecessary re-renders
  *
- * @param isCopilotPlus - Whether to include PDF files (Plus feature)
+ * @param includeExtendedFiles - Whether to include PDF files
  * @returns Array of TFile objects sorted by creation date (newest first)
  */
-export function useAllNotes(isCopilotPlus: boolean = false): TFile[] {
+export function useAllNotes(includeExtendedFiles: boolean = false): TFile[] {
   const allNotes = useAtomValue(notesAtom, { store: settingsStore });
 
   return useMemo(() => {

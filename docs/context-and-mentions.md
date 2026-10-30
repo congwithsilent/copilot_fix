@@ -72,11 +72,11 @@ Paste a URL or type `@https://...` to fetch and include a web page's content:
 @https://example.com/article summarize this article
 ```
 
-URL processing requires Copilot Plus. YouTube URLs are handled specially — Copilot will fetch the video transcript automatically.
+General URL content extraction is not available in this build. YouTube URLs are handled specially — Copilot fetches the video transcript automatically when a Supadata API key is configured (Settings → Agent).
 
 ### Tool Mentions
 
-These special @-mentions explicitly trigger tools in Copilot Plus mode:
+These special @-mentions explicitly trigger tools in Chat (agent) and Projects mode:
 
 | Mention                | What it does                                     |
 | ---------------------- | ------------------------------------------------ |
@@ -108,9 +108,15 @@ Use the command palette: **Add web selection to chat context**
 
 Works similarly but captures selected text from the Web Viewer. Available on desktop only.
 
-### Adding a PDF as Context (Copilot Plus)
+### Adding a PDF as Context
 
-Click the **Context** button above the chat input to attach a PDF file. The PDF is converted to text and included as context for your message.
+Attached PDFs are rendered locally into page images for vision models. Each PDF in the composer has **From** and **To** fields: both endpoints are included and use physical page positions starting at 1, regardless of printed page labels. **Current ±1** selects the open reader's page and its available neighbours; **All pages** selects the entire document. If the reader position is unavailable, the initial selection starts at page 1. Check the displayed range before sending.
+
+Only selected pages are sent, using ordinary image inputs rather than PDF file inputs. Individual rendered pages are cached under `.copilot/pdf-page-cache`, so overlapping ranges reuse images. Changing the PDF or render profile invalidates cached images. Local caching saves rendering work; submitted images still consume provider input tokens, and provider prompt-cache discounts depend on the API. Reducing the page range is what directly reduces image input. A vision-capable model is required.
+
+Saved chats keep the selected page ranges; regeneration reloads those pages from the current local PDF. This is a reference to the file, not an archived copy of the document.
+
+Click the **Context** button above the chat input to attach a PDF file, then select the page range above the composer before sending. Explicit PDF attachments use page images; PDFs embedded inside Markdown notes still use the configured text-parsing backend.
 
 ### Adding an Image as Context
 
@@ -126,16 +132,16 @@ When context items are added to your message, Copilot shows small pills or badge
 
 ## Context Behavior by Mode
 
-| Context Type    | Chat              | Vault QA          | Copilot Plus |
-| --------------- | ----------------- | ----------------- | ------------ |
-| Active note     | Yes (auto)        | Yes (auto)        | Yes (auto)   |
-| Selected text   | Yes (auto)        | Yes (auto)        | Yes (auto)   |
-| @note / @folder | Yes               | Yes               | Yes          |
-| @URL processing | Copilot Plus only | Copilot Plus only | Yes          |
-| @vault search   | Yes (explicit)    | Auto              | Auto         |
-| @websearch      | No                | No                | Yes          |
-| Images (vision) | Yes               | Yes               | Yes          |
-| Active web tab  | Desktop only      | Desktop only      | Desktop only |
+| Context Type    | Chat             | Vault QA     | Projects     |
+| --------------- | ---------------- | ------------ | ------------ |
+| Active note     | Yes (auto)       | Yes (auto)   | Yes (auto)   |
+| Selected text   | Yes (auto)       | Yes (auto)   | Yes (auto)   |
+| @note / @folder | Yes              | Yes          | Yes          |
+| @URL processing | YouTube only     | YouTube only | YouTube only |
+| @vault search   | Yes (explicit)   | Auto         | Auto         |
+| @websearch      | With Agent/pills | No           | Yes          |
+| Images (vision) | Yes              | Yes          | Yes          |
+| Active web tab  | Desktop only     | Desktop only | Desktop only |
 
 ---
 

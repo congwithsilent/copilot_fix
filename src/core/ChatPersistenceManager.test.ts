@@ -123,6 +123,27 @@ describe("ChatPersistenceManager", () => {
   });
 
   describe("formatChatContent", () => {
+    it("round-trips PDF page ranges including paths with context delimiters", () => {
+      const path = "papers/a [draft] | notes.pdf";
+      const file = Object.assign(new TFile(), { path, name: "notes.pdf" });
+      mockApp.vault.getAbstractFileByPath.mockImplementation((requested: string) =>
+        requested === path ? file : null
+      );
+      const ranges = { [path]: { startPage: 7, endPage: 12 } };
+      const message: ChatMessage = {
+        message: "Explain these pages",
+        sender: USER_SENDER,
+        isVisible: true,
+        timestamp: null,
+        context: { notes: [], urls: [], pdfPageRanges: ranges },
+      };
+      const text = (persistenceManager as any).formatChatContent([message]);
+      const restored = (persistenceManager as any).parseChatContent(text);
+      // A range remains available even if the message has no ordinary note badges.
+      expect(restored[0].context?.pdfPageRanges).toEqual(ranges);
+      expect(restored[0].message).toBe(message.message);
+    });
+
     it("should format messages in the correct format", () => {
       const messages: ChatMessage[] = [
         {
@@ -1383,10 +1404,10 @@ tags:
       mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
       mockApp.vault.getAbstractFileByPath.mockReturnValue(true);
 
-      await persistenceManager.saveChat("copilot-plus-flash|copilot-plus");
+      await persistenceManager.saveChat("gemini-2.5-flash|google");
 
       const savedContent = mockApp.vault.create.mock.calls[0][1];
-      expect(savedContent).toContain('modelKey: "copilot-plus-flash|copilot-plus"');
+      expect(savedContent).toContain('modelKey: "gemini-2.5-flash|google"');
     });
 
     it("should properly escape modelKey with embedded quotes", async () => {
